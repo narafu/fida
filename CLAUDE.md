@@ -40,15 +40,41 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 
 ## Current Status
 
-- `docker-compose.yml` — 아직 starter-kit 기준 (postgres/grafana 포함). FIDA 전용으로 교체 필요 (fida + playwright-server 2개 서비스)
-- 소스 코드: 스켈레톤 상태 (FidaApplication, GlobalExceptionHandler, HexagonalArchitectureTest만 존재)
+- `docker-compose.yml` — starter-kit 기준 (postgres/grafana 포함). 태스크 #11에서 교체 예정 (fida + playwright-server 2개 서비스)
+- 소스 코드: 프로젝트 초기화 완료. 도메인·어댑터 구현은 미완 (태스크 #3~#10 pending)
 - 구현 태스크는 shrimp-task-manager로 관리 중 (`list_tasks`로 확인)
 
 ## Task Management
 
 - 작업 시작 전 `list_tasks`로 현재 태스크 확인
+- 태스크 상태 전이: `execute_task` (pending→in_progress) → 구현 → `verify_task` (in_progress→completed)
+- `verify_task` 직접 호출 불가 — 반드시 `execute_task` 먼저 호출해야 함
+- pending 태스크도 실제 코드가 이미 구현되어 있을 수 있으므로, `execute_task` 전에 현재 파일 상태 확인 권장
 - 규칙 초기화/변경 시: `init_project_rules` → `process_thought` → `split_tasks`
 - 태스크 추가: `split_tasks` with `updateMode: append`
+
+## Environment Variables
+
+`.env` 파일 사용 (`.env.example` 참조). 신규 변수 추가 시 `.env.example`도 반드시 동기화.
+
+| 변수 | 설명 |
+|------|------|
+| `GEMINI_API_KEY` | Gemini Vision API |
+| `FANDING_EMAIL` / `FANDING_PASSWORD` | fanding.kr 로그인 (playwright-server 전달) |
+| `GOOGLE_SHEETS_SPREADSHEET_ID` | 시트 ID |
+| `GOOGLE_SERVICE_ACCOUNT_JSON_PATH` | `/secrets/service-account.json` |
+| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | 텔레그램 알림 |
+| `SCRAPER_URL` | `http://playwright-server:3000/scrape` |
+| `KISTA_URL` | 미설정 시 KISTA 연동 생략 |
+
+## File Interaction Rules
+
+| 수정 파일 | 함께 수정 필요 |
+|-----------|---------------|
+| `domain/model` 필드 변경 | 관련 Port, TradingRecordService, 연관 Adapter |
+| `ParsedOrder` 필드 변경 | `GeminiVisionAdapter` 파싱 로직 동기화 |
+| `TradingRecord` 필드 변경 | `GoogleSheetsAdapter`, `TelegramAdapter` 메시지 포맷 |
+| 새 환경변수 추가 | `.env.example` 반드시 업데이트 |
 
 ## Design Reference
 
