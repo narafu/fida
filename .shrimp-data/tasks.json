@@ -1,0 +1,129 @@
+{
+  "tasks": [
+    {
+      "id": "b85cf8f2-2ce6-4030-ad09-cac32b51c27b",
+      "name": "FIDA 연동 구현",
+      "description": "FidaOrderController (POST /api/fida/orders), FidaOrderService 구현. FIDA 프로젝트에 KISTA API 호출 코드 추가.",
+      "notes": "KISTA_URL 환경변수로 kista 엔드포인트 주입. FIDA docker-compose에 kista 네트워크 연결 추가.",
+      "status": "pending",
+      "dependencies": [
+        {
+          "taskId": "4d235246-4ed3-4173-9f9e-f786d57f79d9"
+        },
+        {
+          "taskId": "c116e9b1-328c-4108-aa85-2f4f432995f7"
+        }
+      ],
+      "createdAt": "2026-04-23T14:48:52.228Z",
+      "updatedAt": "2026-04-23T14:48:52.228Z",
+      "relatedFiles": [
+        {
+          "path": "/home/user/workspace/kista/src/main/java/com/kista/adapter/in/web/FidaOrderController.java",
+          "type": "CREATE",
+          "description": "FIDA 주문 컨트롤러"
+        },
+        {
+          "path": "/home/user/workspace/kista/src/main/java/com/kista/application/service/FidaOrderService.java",
+          "type": "CREATE",
+          "description": "FIDA 주문 서비스"
+        },
+        {
+          "path": "/home/user/workspace/fida/src/main/java/com/fida/adapter/out/sheets/GoogleSheetsAdapter.java",
+          "type": "TO_MODIFY",
+          "description": "KISTA API 호출 추가"
+        }
+      ],
+      "implementationGuide": "// FidaOrderRequest.java (DTO)\nrecord FidaOrderRequest(LocalDate date,\n  List<FidaOrderItem> buy, List<FidaOrderItem> sell,\n  BigDecimal cashBalance, BigDecimal avgPrice, int holdings) {}\nrecord FidaOrderItem(BigDecimal price, String qty) {}\n\n// FidaOrderController.java\nPOST /api/fida/orders → fidaOrderService.execute(request) → 202 Accepted\n\n// FidaOrderService.java implements ExecuteFidaOrderUseCase\n1. 매매표 유효성 검증 (날짜 오늘인지, buy/sell null 아닌지)\n2. KIS 토큰 발급\n3. buy 주문 순서대로 KisOrderPort.place()\n4. sell 주문 순서대로 KisOrderPort.place()\n5. 결과 trade_histories 저장 (phase='FIDA')\n6. Telegram 결과 알림\n\n// FIDA 프로젝트 수정:\n// fida/src/.../adapter/out/sheets/GoogleSheetsAdapter.java\n// Sheets 저장 완료 후 RestTemplate으로 POST http://kista:8080/api/fida/orders 호출 추가",
+      "verificationCriteria": "수동으로 POST /api/fida/orders 호출 → KIS 주문 실행 확인. trade_histories에 phase='FIDA' 레코드 저장 확인. Telegram 결과 알림 수신.",
+      "analysisResult": "KISTA (KIS Trading Automation) — trade-kis-n8n n8n 자동화를 Spring Boot로 마이그레이션. claude-starter-kit 기반 Hexagonal Architecture, Java 21 Virtual Thread, PostgreSQL + Flyway, KIS REST API 직접 호출, Telegram 봇, 웹 대시보드, FIDA 연동 순서로 구현."
+    },
+    {
+      "id": "7c6933c4-bd80-4816-ab7a-a36c7672492f",
+      "name": "프로젝트 초기화 (claude-starter-kit 복사 및 설정)",
+      "description": "claude-starter-kit을 fida/로 복사하고 com.fida 패키지로 전환. 불필요한 의존성(JPA, PostgreSQL, Flyway, Querydsl, Spring AI MCP) 제거. Google Sheets/Auth 의존성 추가. Item 도메인 코드 전체 제거.",
+      "status": "pending",
+      "dependencies": [],
+      "createdAt": "2026-04-23T14:52:05.986Z",
+      "updatedAt": "2026-04-23T14:52:05.986Z",
+      "relatedFiles": [
+        {
+          "path": "fida/settings.gradle.kts",
+          "type": "CREATE",
+          "description": "rootProject.name=fida"
+        },
+        {
+          "path": "fida/build.gradle.kts",
+          "type": "CREATE",
+          "description": "불필요 의존성 제거 + Google Sheets 추가"
+        },
+        {
+          "path": "fida/src/main/java/com/fida/FidaApplication.java",
+          "type": "CREATE",
+          "description": "메인 클래스"
+        },
+        {
+          "path": "fida/src/main/resources/application.properties",
+          "type": "CREATE",
+          "description": "JPA/Flyway 설정 없는 클린 설정"
+        },
+        {
+          "path": "../claude-starter-kit/build.gradle.kts",
+          "type": "REFERENCE",
+          "description": "기반 의존성 참조"
+        }
+      ],
+      "implementationGuide": "1. claude-starter-kit 전체 파일을 fida/로 복사\n2. settings.gradle.kts: rootProject.name = 'fida'\n3. build.gradle.kts:\n   - group = 'com.fida'\n   - 제거: data-jpa, postgresql, flyway-core, flyway-postgresql, querydsl-*, spring-ai-mcp-server-starter, testcontainers-postgresql\n   - 제거: dependencyManagement BOM(spring-ai-bom), springAiVersion\n   - 제거: Querydsl Q클래스 생성 sourceSets/tasks 블록\n   - 추가: google-api-services-sheets:v4-rev20241201-2.0.0, google-auth-library-oauth2-http:1.23.0\n4. 패키지 com.starter → com.fida 전체 rename\n5. StarterApplication → FidaApplication\n6. 제거 대상 클래스: ItemController, ItemService, ItemEntity, ItemJpaRepository, ItemPersistenceAdapter, ItemQueryRepository, QuerydslConfig, ItemMcpTools, McpToolConfig, 모든 DTO(CreateItemRequest, ItemResponse, UpdateItemRequest)\n7. ArchUnit 테스트 com.starter → com.fida 패키지명 수정\n8. application.properties: JPA, Flyway, Datasource, Spring AI 설정 제거\n9. ./gradlew build 성공 확인",
+      "verificationCriteria": "./gradlew build 성공. com.starter 잔재 없음. Item/MCP 관련 클래스 없음. JPA/DB 관련 의존성 없음.",
+      "analysisResult": "FIDA 프로젝트 — fanding-auto n8n 마이그레이션. 패키지: com.fida, DB 없음, claude-starter-kit 기반. 분석 결과: starter-kit의 JPA/Querydsl/Spring AI MCP 의존성 제거 필수, playwright-server는 실제로 puppeteer 사용(scrape-server.js 기존 코드 재사용 가능), Dockerfile은 그대로 재사용 가능."
+    },
+    {
+      "id": "d4e456d2-57db-495a-94d4-84819814f608",
+      "name": "playwright-server 디렉토리 구성",
+      "description": "fanding-auto/scripts/ 파일들을 fida/playwright-server/로 복사. 실제로는 Puppeteer 기반(package.json에 puppeteer). Dockerfile은 node:20-slim + puppeteer chromium 설치로 작성.",
+      "notes": "라이브러리는 puppeteer이지만 서버명/디렉토리명은 playwright-server 유지. docker-compose healthcheck는 wget -qO- http://localhost:3000/health 사용.",
+      "status": "pending",
+      "dependencies": [
+        {
+          "taskId": "7c6933c4-bd80-4816-ab7a-a36c7672492f"
+        }
+      ],
+      "createdAt": "2026-04-23T14:52:05.986Z",
+      "updatedAt": "2026-04-23T14:52:05.986Z",
+      "relatedFiles": [
+        {
+          "path": "fida/playwright-server/scrape-server.js",
+          "type": "CREATE",
+          "description": "/scrape, /health 엔드포인트 (기존 코드 복사)"
+        },
+        {
+          "path": "fida/playwright-server/scrape-fanding.js",
+          "type": "CREATE",
+          "description": "Puppeteer 스크래핑 로직 (기존 코드 복사)"
+        },
+        {
+          "path": "fida/playwright-server/package.json",
+          "type": "CREATE",
+          "description": "puppeteer 의존성"
+        },
+        {
+          "path": "fida/playwright-server/Dockerfile",
+          "type": "CREATE",
+          "description": "node:20-slim + puppeteer chromium"
+        },
+        {
+          "path": "../fanding-auto/scripts/scrape-server.js",
+          "type": "REFERENCE",
+          "description": "기존 서버 코드"
+        },
+        {
+          "path": "../fanding-auto/scripts/scrape-fanding.js",
+          "type": "REFERENCE",
+          "description": "기존 스크래핑 로직"
+        }
+      ],
+      "implementationGuide": "1. fanding-auto/scripts/{scrape-server.js, scrape-fanding.js, package.json} → fida/playwright-server/ 복사\n2. scrape-server.js는 이미 /scrape, /health 완비 — 수정 불필요\n3. package.json puppeteer 의존성 확인 (이미 존재)\n4. Dockerfile 작성:\n   FROM node:20-slim\n   ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false\n   RUN apt-get update && apt-get install -y chromium\n   WORKDIR /app\n   COPY package*.json ./\n   RUN npm ci\n   COPY . .\n   EXPOSE 3000\n   CMD ['node', 'scrape-server.js']\n5. .dockerignore 추가 (node_modules)\n6. GET /health → {status:'ok'} 응답 확인",
+      "verificationCriteria": "node scrape-server.js 실행 후 GET /health → {status:'ok'}, GET /scrape → JSON 응답 확인.",
+      "analysisResult": "FIDA 프로젝트 — fanding-auto n8n 마이그레이션. 패키지: com.fida, DB 없음, claude-starter-kit 기반. 분석 결과: starter-kit의 JPA/Querydsl/Spring AI MCP 의존성 제거 필수, playwright-server는 실제로 puppeteer 사용(scrape-server.js 기존 코드 재사용 가능), Dockerfile은 그대로 재사용 가능."
+    }
+  ]
+}
