@@ -41,10 +41,10 @@
       "id": "7c6933c4-bd80-4816-ab7a-a36c7672492f",
       "name": "프로젝트 초기화 (claude-starter-kit 복사 및 설정)",
       "description": "claude-starter-kit을 fida/로 복사하고 com.fida 패키지로 전환. 불필요한 의존성(JPA, PostgreSQL, Flyway, Querydsl, Spring AI MCP) 제거. Google Sheets/Auth 의존성 추가. Item 도메인 코드 전체 제거.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [],
       "createdAt": "2026-04-23T14:52:05.986Z",
-      "updatedAt": "2026-04-23T14:52:05.986Z",
+      "updatedAt": "2026-04-24T05:12:00.493Z",
       "relatedFiles": [
         {
           "path": "fida/settings.gradle.kts",
@@ -74,7 +74,9 @@
       ],
       "implementationGuide": "1. claude-starter-kit 전체 파일을 fida/로 복사\n2. settings.gradle.kts: rootProject.name = 'fida'\n3. build.gradle.kts:\n   - group = 'com.fida'\n   - 제거: data-jpa, postgresql, flyway-core, flyway-postgresql, querydsl-*, spring-ai-mcp-server-starter, testcontainers-postgresql\n   - 제거: dependencyManagement BOM(spring-ai-bom), springAiVersion\n   - 제거: Querydsl Q클래스 생성 sourceSets/tasks 블록\n   - 추가: google-api-services-sheets:v4-rev20241201-2.0.0, google-auth-library-oauth2-http:1.23.0\n4. 패키지 com.starter → com.fida 전체 rename\n5. StarterApplication → FidaApplication\n6. 제거 대상 클래스: ItemController, ItemService, ItemEntity, ItemJpaRepository, ItemPersistenceAdapter, ItemQueryRepository, QuerydslConfig, ItemMcpTools, McpToolConfig, 모든 DTO(CreateItemRequest, ItemResponse, UpdateItemRequest)\n7. ArchUnit 테스트 com.starter → com.fida 패키지명 수정\n8. application.properties: JPA, Flyway, Datasource, Spring AI 설정 제거\n9. ./gradlew build 성공 확인",
       "verificationCriteria": "./gradlew build 성공. com.starter 잔재 없음. Item/MCP 관련 클래스 없음. JPA/DB 관련 의존성 없음.",
-      "analysisResult": "FIDA 프로젝트 — fanding-auto n8n 마이그레이션. 패키지: com.fida, DB 없음, claude-starter-kit 기반. 분석 결과: starter-kit의 JPA/Querydsl/Spring AI MCP 의존성 제거 필수, playwright-server는 실제로 puppeteer 사용(scrape-server.js 기존 코드 재사용 가능), Dockerfile은 그대로 재사용 가능."
+      "analysisResult": "FIDA 프로젝트 — fanding-auto n8n 마이그레이션. 패키지: com.fida, DB 없음, claude-starter-kit 기반. 분석 결과: starter-kit의 JPA/Querydsl/Spring AI MCP 의존성 제거 필수, playwright-server는 실제로 puppeteer 사용(scrape-server.js 기존 코드 재사용 가능), Dockerfile은 그대로 재사용 가능.",
+      "summary": "com.fida 패키지 전환 완료, com.starter 잔재 없음, JPA/DB/Querydsl/SpringAI-MCP 의존성 제거 확인, Google Sheets/Auth 의존성 추가 완료, ./gradlew build 성공. FidaApplication, GlobalExceptionHandler, HexagonalArchitectureTest 스켈레톤 존재. 검증 기준 모두 충족.",
+      "completedAt": "2026-04-24T05:12:00.488Z"
     },
     {
       "id": "d4e456d2-57db-495a-94d4-84819814f608",
