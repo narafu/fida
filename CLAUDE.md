@@ -41,7 +41,6 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 - Virtual Threads 활성화 (`spring.threads.virtual.enabled=true`)
 - springdoc **2.7.0 이상** 필요 — 2.6.x는 Spring Boot 3.4.x(Spring Framework 6.2)와 `NoSuchMethodError: ControllerAdviceBean` 충돌. 현재 `springdoc = "2.6.0"` → **2.8.4로 업그레이드 필요** (`gradle/libs.versions.toml`)
 - Docker: ZGC + MaxRAMPercentage=75.0, non-root 실행
-- 외부 파일/자격증명을 읽는 `@Bean`(예: GoogleSheetsConfig): `@Bean @Lazy` + `@Component @Lazy` + 주입 지점 `@Lazy InterfacePort` 3단 설정 필수 — 하나라도 빠지면 Spring 기동 시 파일 읽기 실패
 
 ## Current Status
 
@@ -73,23 +72,10 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 | `SCRAPER_URL` | `http://playwright-server:3000/scrape` |
 | `KISTA_URL` | 미설정 시 KISTA 연동 생략 |
 
-## File Interaction Rules
-
-| 수정 파일 | 함께 수정 필요 |
-|-----------|---------------|
-| `domain/model` 필드 변경 | 관련 Port, TradingRecordService, 연관 Adapter |
-| `ParsedOrder` 필드 변경 | `GeminiVisionAdapter` 파싱 로직 동기화 |
-| `TradingRecord` 필드 변경 | `GoogleSheetsAdapter`, `TelegramAdapter` 메시지 포맷 |
-| 새 환경변수 추가 | `.env.example` 반드시 업데이트 |
-| 옵셔널 아웃바운드 어댑터 추가 | `application.yml`에 `url: ${VAR:}` 추가 + `@ConditionalOnProperty("x.url")` + 포트를 `Optional<XxxPort>`로 주입 |
-
-## playwright-server Gotchas
-
-- `node:20-slim`에 `wget`/`curl` 없음 → healthcheck는 `["CMD","node","-e","require('http').get('http://localhost:3000/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]`
-- `npm ci`는 `package-lock.json` 필수 → 없으면 `playwright-server/`에서 `npm install --package-lock-only`로 생성
-- `.gitignore`의 `.env*` 패턴이 `.env.example`도 차단 → `!.env.example` 예외 필요
-
 ## Design Reference
 
 - 전체 설계: `/home/user/.claude/plans/fanding-auto-trade-kis-n8n-linked-fountain.md` (FIDA 섹션)
 - 프로젝트 규칙 상세: `shrimp-rules.md` (Task Manager 자동 참조)
+- 어댑터 규칙 + File Interaction Rules: `src/main/java/com/fida/adapter/CLAUDE.md`
+- 도메인 제약: `src/main/java/com/fida/domain/CLAUDE.md`
+- playwright-server 특이사항: `playwright-server/CLAUDE.md`
