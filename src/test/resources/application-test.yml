@@ -1,24 +1,19 @@
-spring:
-  datasource:
-    # Testcontainers JDBC URL: 테스트 실행 시 자동으로 PostgreSQL 컨테이너를 기동합니다
-    url: jdbc:tc:postgresql:16:///testdb
-    username: test
-    password: test
-    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
+gemini:
+  api-key: test-api-key
 
-  flyway:
-    enabled: true
+scraper:
+  url: http://playwright-server:3000/scrape
 
-  jpa:
-    show-sql: true
-    hibernate:
-      ddl-auto: validate
+google:
+  sheets:
+    spreadsheet-id: test-spreadsheet-id
+    service-account-json-path: /dev/null
+    sheet-name: Fanding
 
-  ai:
-    mcp:
-      server:
-        enabled: false
+telegram:
+  bot-token: test-bot-token
+  chat-id: test-chat-id
 
 logging:
   level:
-    org.hibernate.SQL: DEBUG
+    com.fida: DEBUG
