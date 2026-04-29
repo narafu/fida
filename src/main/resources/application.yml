@@ -32,6 +32,9 @@ server:
 scraper:
   url: ${SCRAPER_URL:http://playwright-server:3000/scrape}
 
+kista:
+  url: ${KISTA_URL:}
+
 gemini:
   api-key: ${GEMINI_API_KEY}
 
