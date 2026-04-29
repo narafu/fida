@@ -1,0 +1,12 @@
+{
+  "name": "fanding-scraper",
+  "version": "1.0.0",
+  "description": "fanding.kr 라오어 Privacy 시리즈 스크래퍼",
+  "main": "scrape-fanding.js",
+  "scripts": {
+    "scrape": "node scrape-fanding.js"
+  },
+  "dependencies": {
+    "puppeteer": "^22.0.0"
+  }
+}
