@@ -11,6 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./gradlew bootJar                        # app.jar 빌드 (테스트 생략)
 ./gradlew bootRun --args='--spring.profiles.active=local'  # 로컬 실행
 docker compose up --build                # 컨테이너 빌드 및 실행
+docker compose build <service> && docker compose up -d --force-recreate <service>  # 설정 변경 후 이미지 재빌드 + 컨테이너 강제 재생성
 ```
 
 ## Architecture
@@ -36,6 +37,7 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 - 스케줄: 화~토 07:00 KST (`cron = "0 0 7 * * TUE-SAT"`, 변경 금지)
 - Google Sheets 셀 범위 고정: `A1, C2:D4, C5:D7, A8, C8, D8`
 - Virtual Threads 활성화 (`spring.threads.virtual.enabled=true`)
+- springdoc **2.7.0 이상** 필요 — 2.6.x는 Spring Boot 3.4.x(Spring Framework 6.2)와 `NoSuchMethodError: ControllerAdviceBean` 충돌. 현재 `springdoc = "2.6.0"` → **2.8.4로 업그레이드 필요** (`gradle/libs.versions.toml`)
 - Docker: ZGC + MaxRAMPercentage=75.0, non-root 실행
 
 ## Current Status

@@ -83,14 +83,14 @@
       "name": "playwright-server 디렉토리 구성",
       "description": "fanding-auto/scripts/ 파일들을 fida/playwright-server/로 복사. 실제로는 Puppeteer 기반(package.json에 puppeteer). Dockerfile은 node:20-slim + puppeteer chromium 설치로 작성.",
       "notes": "라이브러리는 puppeteer이지만 서버명/디렉토리명은 playwright-server 유지. docker-compose healthcheck는 wget -qO- http://localhost:3000/health 사용.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         {
           "taskId": "7c6933c4-bd80-4816-ab7a-a36c7672492f"
         }
       ],
       "createdAt": "2026-04-23T14:52:05.986Z",
-      "updatedAt": "2026-04-23T14:52:05.986Z",
+      "updatedAt": "2026-04-28T05:43:55.429Z",
       "relatedFiles": [
         {
           "path": "fida/playwright-server/scrape-server.js",
@@ -125,20 +125,22 @@
       ],
       "implementationGuide": "1. fanding-auto/scripts/{scrape-server.js, scrape-fanding.js, package.json} → fida/playwright-server/ 복사\n2. scrape-server.js는 이미 /scrape, /health 완비 — 수정 불필요\n3. package.json puppeteer 의존성 확인 (이미 존재)\n4. Dockerfile 작성:\n   FROM node:20-slim\n   ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false\n   RUN apt-get update && apt-get install -y chromium\n   WORKDIR /app\n   COPY package*.json ./\n   RUN npm ci\n   COPY . .\n   EXPOSE 3000\n   CMD ['node', 'scrape-server.js']\n5. .dockerignore 추가 (node_modules)\n6. GET /health → {status:'ok'} 응답 확인",
       "verificationCriteria": "node scrape-server.js 실행 후 GET /health → {status:'ok'}, GET /scrape → JSON 응답 확인.",
-      "analysisResult": "FIDA 프로젝트 — fanding-auto n8n 마이그레이션. 패키지: com.fida, DB 없음, claude-starter-kit 기반. 분석 결과: starter-kit의 JPA/Querydsl/Spring AI MCP 의존성 제거 필수, playwright-server는 실제로 puppeteer 사용(scrape-server.js 기존 코드 재사용 가능), Dockerfile은 그대로 재사용 가능."
+      "analysisResult": "FIDA 프로젝트 — fanding-auto n8n 마이그레이션. 패키지: com.fida, DB 없음, claude-starter-kit 기반. 분석 결과: starter-kit의 JPA/Querydsl/Spring AI MCP 의존성 제거 필수, playwright-server는 실제로 puppeteer 사용(scrape-server.js 기존 코드 재사용 가능), Dockerfile은 그대로 재사용 가능.",
+      "summary": "playwright-server 디렉토리 구성 완료. fanding-auto/scripts에서 scrape-server.js, scrape-fanding.js, package.json 복사. Dockerfile(node:20-slim + chromium, PUPPETEER_EXECUTABLE_PATH 지정), .dockerignore 작성. /health 핸들러 로직 검증으로 {status:'ok'} 응답 확인.",
+      "completedAt": "2026-04-28T05:43:55.423Z"
     },
     {
       "id": "26c271f4-8dc0-4ee7-83cd-881ba905a89d",
       "name": "도메인 모델 구현",
       "description": "ScrapedPost, OrderItem, ParsedOrder, TradingRecord 4개 record/class를 domain/model 패키지에 구현한다.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         {
           "taskId": "7c6933c4-bd80-4816-ab7a-a36c7672492f"
         }
       ],
       "createdAt": "2026-04-24T00:48:46.862Z",
-      "updatedAt": "2026-04-24T00:48:46.862Z",
+      "updatedAt": "2026-04-28T05:36:00.105Z",
       "relatedFiles": [
         {
           "path": "src/main/java/com/fida/domain/model/ScrapedPost.java",
@@ -163,20 +165,22 @@
       ],
       "implementationGuide": "// ScrapedPost\npublic record ScrapedPost(String postTitle, LocalDate postDate, String postUrl, List<byte[]> images) {}\n\n// OrderItem\npublic record OrderItem(@Nullable BigDecimal price, @Nullable String qty) {}\n\n// ParsedOrder\npublic record ParsedOrder(List<OrderItem> buyOrders, List<OrderItem> sellOrders, @Nullable BigDecimal cashBalance, @Nullable BigDecimal avgPrice, int holdings) {}\n\n// TradingRecord (static factory 포함)\npublic class TradingRecord {\n  private final LocalDate date;\n  private final String postTitle;\n  private final String postUrl;\n  private final ParsedOrder order;\n  public static TradingRecord of(ScrapedPost post, ParsedOrder order) { ... }\n}\n\n- domain 레이어에 Spring 어노테이션 금지\n- @Nullable은 org.springframework.lang.Nullable 사용\n- BigDecimal 연산 시 RoundingMode 명시",
       "verificationCriteria": "./gradlew build 성공 + HexagonalArchitectureTest 통과 + domain 레이어에 Spring 의존성 없음",
-      "analysisResult": "FIDA 프로젝트(fanding.kr 스크래핑 → Gemini Vision OCR → Google Sheets 자동화)의 전체 구현 태스크를 등록한다. Hexagonal Architecture 준수, DB 없음, RestTemplate 전용, gemini-2.5-flash-lite 고정이 핵심 제약이다."
+      "analysisResult": "FIDA 프로젝트(fanding.kr 스크래핑 → Gemini Vision OCR → Google Sheets 자동화)의 전체 구현 태스크를 등록한다. Hexagonal Architecture 준수, DB 없음, RestTemplate 전용, gemini-2.5-flash-lite 고정이 핵심 제약이다.",
+      "summary": "ScrapedPost, OrderItem, ParsedOrder(record), TradingRecord(static factory) 4개 구현 완료. domain 레이어에 Spring stereotype 의존성 없음. @Nullable은 org.springframework.lang 사용. TDD 적용: DomainModelTest 5개 케이스 작성 후 구현. ./gradlew test 전체 통과(HexagonalArchitectureTest 포함).",
+      "completedAt": "2026-04-28T05:36:00.100Z"
     },
     {
       "id": "c913181d-558d-4856-a57b-429e83b71c47",
       "name": "Port 인터페이스 정의",
       "description": "ProcessTradingRecordUseCase(in), ScraperPort/OcrPort/SheetPort/NotifyPort/KistaPort(out) 5+1개 인터페이스를 domain/port 패키지에 정의한다.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         {
           "taskId": "7c6933c4-bd80-4816-ab7a-a36c7672492f"
         }
       ],
       "createdAt": "2026-04-24T00:48:46.862Z",
-      "updatedAt": "2026-04-24T00:48:46.862Z",
+      "updatedAt": "2026-04-28T05:40:34.799Z",
       "relatedFiles": [
         {
           "path": "src/main/java/com/fida/domain/port/in/ProcessTradingRecordUseCase.java",
@@ -211,13 +215,15 @@
       ],
       "implementationGuide": "// domain/port/in\npublic interface ProcessTradingRecordUseCase { void process(); }\n\n// domain/port/out\npublic interface ScraperPort { ScrapedPost scrape(); }\npublic interface OcrPort { ParsedOrder analyze(List<byte[]> images); }\npublic interface SheetPort { void update(TradingRecord record); }\npublic interface NotifyPort { void notify(TradingRecord record); }\npublic interface KistaPort { void sendOrders(TradingRecord record); } // optional 연동",
       "verificationCriteria": "./gradlew build 성공 + 모든 인터페이스가 domain 패키지에 위치",
-      "analysisResult": "FIDA 프로젝트(fanding.kr 스크래핑 → Gemini Vision OCR → Google Sheets 자동화)의 전체 구현 태스크를 등록한다. Hexagonal Architecture 준수, DB 없음, RestTemplate 전용, gemini-2.5-flash-lite 고정이 핵심 제약이다."
+      "analysisResult": "FIDA 프로젝트(fanding.kr 스크래핑 → Gemini Vision OCR → Google Sheets 자동화)의 전체 구현 태스크를 등록한다. Hexagonal Architecture 준수, DB 없음, RestTemplate 전용, gemini-2.5-flash-lite 고정이 핵심 제약이다.",
+      "summary": "ProcessTradingRecordUseCase(in), ScraperPort/OcrPort/SheetPort/NotifyPort/KistaPort(out) 6개 인터페이스 domain/port 패키지에 정의 완료. TDD 적용: PortContractTest 7개 케이스 작성 후 구현. 전체 테스트 통과, HexagonalArchitectureTest 포함.",
+      "completedAt": "2026-04-28T05:40:34.759Z"
     },
     {
       "id": "16dce118-2024-451b-a6c2-0620215e4b17",
       "name": "TradingRecordService 구현",
       "description": "ProcessTradingRecordUseCase를 구현하는 TradingRecordService를 application/service 패키지에 작성한다. scrape → OCR → record 생성 → sheet 업데이트 → notify → (optional) KISTA 전송 흐름 구현.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         {
           "taskId": "26c271f4-8dc0-4ee7-83cd-881ba905a89d"
@@ -227,7 +233,7 @@
         }
       ],
       "createdAt": "2026-04-24T00:48:46.862Z",
-      "updatedAt": "2026-04-24T00:48:46.862Z",
+      "updatedAt": "2026-04-28T05:42:41.389Z",
       "relatedFiles": [
         {
           "path": "src/main/java/com/fida/application/service/TradingRecordService.java",
@@ -247,14 +253,16 @@
       ],
       "implementationGuide": "@Service\n@RequiredArgsConstructor\npublic class TradingRecordService implements ProcessTradingRecordUseCase {\n  private final ScraperPort scraper;\n  private final OcrPort ocr;\n  private final SheetPort sheet;\n  private final NotifyPort notify;\n  private final KistaPort kista; // @Autowired(required=false)\n\n  @Override\n  public void process() {\n    ScrapedPost post = scraper.scrape();\n    ParsedOrder order = ocr.analyze(post.images());\n    TradingRecord record = TradingRecord.of(post, order);\n    sheet.update(record);\n    notify.notify(record);\n    if (kista != null) {\n      try { kista.sendOrders(record); }\n      catch (Exception e) { log.warn(\"KISTA 전송 실패 (무시): {}\", e.getMessage()); }\n    }\n  }\n}",
       "verificationCriteria": "./gradlew build 성공 + application 레이어가 domain만 의존 (adapter 직접 참조 없음)",
-      "analysisResult": "FIDA 프로젝트(fanding.kr 스크래핑 → Gemini Vision OCR → Google Sheets 자동화)의 전체 구현 태스크를 등록한다. Hexagonal Architecture 준수, DB 없음, RestTemplate 전용, gemini-2.5-flash-lite 고정이 핵심 제약이다."
+      "analysisResult": "FIDA 프로젝트(fanding.kr 스크래핑 → Gemini Vision OCR → Google Sheets 자동화)의 전체 구현 태스크를 등록한다. Hexagonal Architecture 준수, DB 없음, RestTemplate 전용, gemini-2.5-flash-lite 고정이 핵심 제약이다.",
+      "summary": "TradingRecordService 구현 완료. Optional&lt;KistaPort&gt; 생성자 주입으로 optional 연동 처리. scrape→OCR→record→sheet→notify→(kista?) 파이프라인 구현. KISTA 예외는 warn 로그 후 무시. TDD 5개 케이스(순서 검증, TradingRecord 내용, KISTA 유무, 예외 처리) 전체 통과. HexagonalArchitectureTest 포함 빌드 성공.",
+      "completedAt": "2026-04-28T05:42:41.376Z"
     },
     {
       "id": "1a900f62-28df-4a5d-81c9-dd15b1546afe",
       "name": "FandingScraperAdapter 구현",
       "description": "ScraperPort를 구현하는 FandingScraperAdapter를 adapter/out/scraper에 작성한다. playwright-server GET /scrape 호출 후 base64 이미지를 byte[]로 변환한다.",
       "notes": "playwright-server가 실행 중이어야 통합 테스트 가능. 단위 테스트는 MockRestServiceServer 사용.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         {
           "taskId": "d4e456d2-57db-495a-94d4-84819814f608"
@@ -264,7 +272,7 @@
         }
       ],
       "createdAt": "2026-04-24T00:48:46.862Z",
-      "updatedAt": "2026-04-24T00:48:46.862Z",
+      "updatedAt": "2026-04-28T05:49:40.255Z",
       "relatedFiles": [
         {
           "path": "src/main/java/com/fida/adapter/out/scraper/FandingScraperAdapter.java",
@@ -284,13 +292,15 @@
       ],
       "implementationGuide": "@Component\npublic class FandingScraperAdapter implements ScraperPort {\n  // RestTemplate: 타임아웃 120초\n  // SCRAPER_URL 환경변수에서 주입\n  // 응답 JSON: { postTitle, postDate, postUrl, images: [base64, ...] }\n  // Base64.getDecoder().decode(img) → byte[]\n  // 실패 시 ScraperException throw\n}",
       "verificationCriteria": "MockRestServiceServer로 단위 테스트 통과 + base64 → byte[] 변환 정상",
-      "analysisResult": "FIDA 프로젝트(fanding.kr 스크래핑 → Gemini Vision OCR → Google Sheets 자동화)의 전체 구현 태스크를 등록한다. Hexagonal Architecture 준수, DB 없음, RestTemplate 전용, gemini-2.5-flash-lite 고정이 핵심 제약이다."
+      "analysisResult": "FIDA 프로젝트(fanding.kr 스크래핑 → Gemini Vision OCR → Google Sheets 자동화)의 전체 구현 태스크를 등록한다. Hexagonal Architecture 준수, DB 없음, RestTemplate 전용, gemini-2.5-flash-lite 고정이 핵심 제약이다.",
+      "summary": "FandingScraperAdapter 구현 완료. RestTemplate(타임아웃 10s/120s) + @Value scraper.url 주입. ScrapeResponse/ImageData 내부 record로 JSON 파싱. base64→byte[] 변환 정상. ScraperException(success=false, HTTP 500) 처리. RestTemplateConfig @Bean 추가. TDD 3개 케이스 MockRestServiceServer 모두 통과.",
+      "completedAt": "2026-04-28T05:49:40.247Z"
     },
     {
       "id": "7147a306-d637-485e-bc57-d922887eacae",
       "name": "GeminiVisionAdapter 구현",
       "description": "OcrPort를 구현하는 GeminiVisionAdapter를 adapter/out/ocr에 작성한다. 이미지 byte[]를 Gemini API에 전송하고 ParsedOrder로 파싱한다.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         {
           "taskId": "26c271f4-8dc0-4ee7-83cd-881ba905a89d"
@@ -300,7 +310,7 @@
         }
       ],
       "createdAt": "2026-04-24T00:48:46.862Z",
-      "updatedAt": "2026-04-24T00:48:46.863Z",
+      "updatedAt": "2026-04-28T06:02:18.603Z",
       "relatedFiles": [
         {
           "path": "src/main/java/com/fida/adapter/out/ocr/GeminiVisionAdapter.java",
@@ -320,13 +330,15 @@
       ],
       "implementationGuide": "@Component\npublic class GeminiVisionAdapter implements OcrPort {\n  // 모델: gemini-2.5-flash-lite (고정)\n  // endpoint: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent\n  // byte[] → Base64 → inline_data (mimeType: image/png)\n  // 응답 파싱: ```json 블록 먼저 시도 → 없으면 순수 JSON\n  // holdings < 0 → 0 보정\n  // holdings == 0 → avgPrice = null 강제\n  // 실패 시 OcrException throw\n}",
       "verificationCriteria": "MockRestServiceServer로 단위 테스트 통과 + holdings 음수/0 보정 로직 검증",
-      "analysisResult": "FIDA 프로젝트(fanding.kr 스크래핑 → Gemini Vision OCR → Google Sheets 자동화)의 전체 구현 태스크를 등록한다. Hexagonal Architecture 준수, DB 없음, RestTemplate 전용, gemini-2.5-flash-lite 고정이 핵심 제약이다."
+      "analysisResult": "FIDA 프로젝트(fanding.kr 스크래핑 → Gemini Vision OCR → Google Sheets 자동화)의 전체 구현 태스크를 등록한다. Hexagonal Architecture 준수, DB 없음, RestTemplate 전용, gemini-2.5-flash-lite 고정이 핵심 제약이다.",
+      "summary": "GeminiVisionAdapter 구현 완료. gemini-2.5-flash-lite 고정, 기존 n8n 프롬프트 재사용. ```json 블록/순수 JSON 양쪽 파싱, holdings 음수→0 보정, holdings==0→avgPrice null 강제. OcrException 추가. TDD 5개 케이스(정상 파싱, json 펜스, 음수 보정, avgPrice null, 빈 응답) MockRestServiceServer 모두 통과.",
+      "completedAt": "2026-04-28T06:02:18.599Z"
     },
     {
       "id": "c0a8536d-cc61-4fee-bcbc-5b811a1ddbf8",
       "name": "GoogleSheetsAdapter 구현",
       "description": "SheetPort를 구현하는 GoogleSheetsAdapter를 adapter/out/sheets에 작성한다. batchUpdate로 A1, C2:D4, C5:D7, A8, C8, D8 셀을 USER_ENTERED 모드로 업데이트한다.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         {
           "taskId": "26c271f4-8dc0-4ee7-83cd-881ba905a89d"
@@ -336,7 +348,7 @@
         }
       ],
       "createdAt": "2026-04-24T00:48:46.863Z",
-      "updatedAt": "2026-04-24T00:48:46.863Z",
+      "updatedAt": "2026-04-28T06:10:17.188Z",
       "relatedFiles": [
         {
           "path": "src/main/java/com/fida/adapter/out/sheets/GoogleSheetsAdapter.java",
@@ -356,13 +368,15 @@
       ],
       "implementationGuide": "@Component\npublic class GoogleSheetsAdapter implements SheetPort {\n  // google-api-services-sheets 라이브러리 사용\n  // 서비스 계정 JSON: GOOGLE_SERVICE_ACCOUNT_JSON_PATH 환경변수\n  // Spreadsheet ID: GOOGLE_SHEETS_SPREADSHEET_ID 환경변수\n  // batchUpdate: USER_ENTERED 모드\n  // 셀 범위 고정: A1, C2:D4, C5:D7, A8, C8, D8\n}",
       "verificationCriteria": "빌드 성공 + 실제 Sheets API 호출 시 16개 셀 업데이트 확인",
-      "analysisResult": "FIDA 프로젝트(fanding.kr 스크래핑 → Gemini Vision OCR → Google Sheets 자동화)의 전체 구현 태스크를 등록한다. Hexagonal Architecture 준수, DB 없음, RestTemplate 전용, gemini-2.5-flash-lite 고정이 핵심 제약이다."
+      "analysisResult": "FIDA 프로젝트(fanding.kr 스크래핑 → Gemini Vision OCR → Google Sheets 자동화)의 전체 구현 태스크를 등록한다. Hexagonal Architecture 준수, DB 없음, RestTemplate 전용, gemini-2.5-flash-lite 고정이 핵심 제약이다.",
+      "summary": "GoogleSheetsAdapter 구현 완료. 서비스 계정 JSON 인증(GoogleSheetsConfig), batchUpdate USER_ENTERED 모드, 16개 셀 고정 매핑(A1, C2:D4, C5:D7, A8, C8, D8). padTo3으로 매수/매도 빈 행 보정, null→빈 문자열 변환. TDD: buildRangeData 6개 케이스(날짜, 매수 3행, ALL 수량, 잔금/평단/보유, null, 16개 범위 수) 모두 통과.",
+      "completedAt": "2026-04-28T06:10:17.180Z"
     },
     {
       "id": "fe968a5d-7e4f-4ffc-8fc3-a945cf1b7e04",
       "name": "TelegramAdapter 구현",
       "description": "NotifyPort를 구현하는 TelegramAdapter를 adapter/out/notify에 작성한다. 기존 n8n 텔레그램 메시지 포맷으로 전송한다.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         {
           "taskId": "26c271f4-8dc0-4ee7-83cd-881ba905a89d"
@@ -372,7 +386,7 @@
         }
       ],
       "createdAt": "2026-04-24T00:48:46.863Z",
-      "updatedAt": "2026-04-24T00:48:46.863Z",
+      "updatedAt": "2026-04-28T06:17:18.299Z",
       "relatedFiles": [
         {
           "path": "src/main/java/com/fida/adapter/out/notify/TelegramAdapter.java",
@@ -387,13 +401,15 @@
       ],
       "implementationGuide": "@Component\npublic class TelegramAdapter implements NotifyPort {\n  // POST https://api.telegram.org/bot{token}/sendMessage\n  // RestTemplate, 타임아웃 30초\n  // TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID 환경변수\n  // 메시지 포맷: n8n 기존 포맷 재현 (날짜, 매수/매도 목록, 현금잔고, 평단, 보유수량)\n}",
       "verificationCriteria": "MockRestServiceServer로 단위 테스트 통과 + 메시지 포맷 검증",
-      "analysisResult": "FIDA 프로젝트(fanding.kr 스크래핑 → Gemini Vision OCR → Google Sheets 자동화)의 전체 구현 태스크를 등록한다. Hexagonal Architecture 준수, DB 없음, RestTemplate 전용, gemini-2.5-flash-lite 고정이 핵심 제약이다."
+      "analysisResult": "FIDA 프로젝트(fanding.kr 스크래핑 → Gemini Vision OCR → Google Sheets 자동화)의 전체 구현 태스크를 등록한다. Hexagonal Architecture 준수, DB 없음, RestTemplate 전용, gemini-2.5-flash-lite 고정이 핵심 제약이다.",
+      "summary": "TelegramAdapter 구현 완료. NotifyPort 구현체로 RestTemplate 기반 Telegram sendMessage API 호출. n8n 워크플로우의 메시지 포맷 완벽 재현 (✅/📅/📈/📉/💵/📊 이모지, ALL→전부 변환, null→-, 빈 주문→없음). TDD 사이클 준수: buildMessage() 패키지-프라이빗으로 노출하여 5개 단위 테스트 + MockRestServiceServer HTTP 테스트 통과. application.yml에 telegram.bot-token/chat-id 환경변수 매핑 추가.",
+      "completedAt": "2026-04-28T06:17:18.285Z"
     },
     {
       "id": "7a08641d-17fe-471d-991e-4e053c46e2ba",
       "name": "FandingScheduler 구현",
       "description": "adapter/in/schedule/FandingScheduler를 작성한다. cron: 화~토 07:00 KST 고정.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         {
           "taskId": "16dce118-2024-451b-a6c2-0620215e4b17"
@@ -412,7 +428,7 @@
         }
       ],
       "createdAt": "2026-04-24T00:48:46.863Z",
-      "updatedAt": "2026-04-24T00:48:46.863Z",
+      "updatedAt": "2026-04-28T06:19:40.060Z",
       "relatedFiles": [
         {
           "path": "src/main/java/com/fida/adapter/in/schedule/FandingScheduler.java",
@@ -427,20 +443,22 @@
       ],
       "implementationGuide": "@Component\n@RequiredArgsConstructor\npublic class FandingScheduler {\n  private final ProcessTradingRecordUseCase useCase;\n\n  @Scheduled(cron = \"0 0 7 * * TUE-SAT\", zone = \"Asia/Seoul\")\n  public void run() { useCase.process(); }\n}\n\n- application.properties: spring.task.scheduling.enabled=true\n- cron 표현식 및 timezone 절대 변경 금지",
       "verificationCriteria": "./gradlew build 성공 + HexagonalArchitectureTest 통과",
-      "analysisResult": "FIDA 프로젝트(fanding.kr 스크래핑 → Gemini Vision OCR → Google Sheets 자동화)의 전체 구현 태스크를 등록한다. Hexagonal Architecture 준수, DB 없음, RestTemplate 전용, gemini-2.5-flash-lite 고정이 핵심 제약이다."
+      "analysisResult": "FIDA 프로젝트(fanding.kr 스크래핑 → Gemini Vision OCR → Google Sheets 자동화)의 전체 구현 태스크를 등록한다. Hexagonal Architecture 준수, DB 없음, RestTemplate 전용, gemini-2.5-flash-lite 고정이 핵심 제약이다.",
+      "summary": "FandingScheduler 구현 완료. adapter/in/schedule/FandingScheduler.java — @Scheduled(cron=\"0 0 7 * * TUE-SAT\", zone=\"Asia/Seoul\") 고정, ProcessTradingRecordUseCase 생성자 주입. FidaApplication에 @EnableScheduling 추가. TDD 준수: run() 위임 호출 테스트 + 리플렉션으로 cron/zone 어노테이션 값 검증. ./gradlew test + HexagonalArchitectureTest 전체 통과.",
+      "completedAt": "2026-04-28T06:19:40.047Z"
     },
     {
       "id": "59e8425b-0806-4f86-b997-d5504ac11107",
       "name": "docker-compose.yml + .env.example 작성 및 로컬 실행 검증",
       "description": "fida + playwright-server 두 서비스로 구성된 docker-compose.yml과 .env.example을 작성하고 로컬에서 컨테이너 빌드 및 healthcheck 통과를 검증한다.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         {
           "taskId": "7a08641d-17fe-471d-991e-4e053c46e2ba"
         }
       ],
       "createdAt": "2026-04-24T00:48:46.863Z",
-      "updatedAt": "2026-04-24T00:48:46.863Z",
+      "updatedAt": "2026-04-28T06:27:19.259Z",
       "relatedFiles": [
         {
           "path": "docker-compose.yml",
@@ -460,7 +478,9 @@
       ],
       "implementationGuide": "services:\n  fida:\n    build: .\n    env_file: .env\n    volumes:\n      - ./secrets:/secrets:ro\n    depends_on:\n      playwright-server:\n        condition: service_healthy\n    restart: unless-stopped\n\n  playwright-server:\n    build: ./playwright-server\n    environment:\n      FANDING_EMAIL: ${FANDING_EMAIL}\n      FANDING_PASSWORD: ${FANDING_PASSWORD}\n    healthcheck:\n      test: [\"CMD\", \"wget\", \"-qO-\", \"http://localhost:3000/health\"]\n      interval: 30s\n      timeout: 5s\n      retries: 3\n    restart: unless-stopped\n\n- .env.example: 모든 환경변수 빈 값으로 포함 (KISTA_URL 포함)",
       "verificationCriteria": "docker compose build 성공 + docker compose up 후 playwright-server healthcheck 통과 + fida 컨테이너 정상 기동",
-      "analysisResult": "FIDA 프로젝트(fanding.kr 스크래핑 → Gemini Vision OCR → Google Sheets 자동화)의 전체 구현 태스크를 등록한다. Hexagonal Architecture 준수, DB 없음, RestTemplate 전용, gemini-2.5-flash-lite 고정이 핵심 제약이다."
+      "analysisResult": "FIDA 프로젝트(fanding.kr 스크래핑 → Gemini Vision OCR → Google Sheets 자동화)의 전체 구현 태스크를 등록한다. Hexagonal Architecture 준수, DB 없음, RestTemplate 전용, gemini-2.5-flash-lite 고정이 핵심 제약이다.",
+      "summary": "docker-compose.yml 교체 완료 (fida + playwright-server 2 서비스). playwright-server 헬스체크를 node HTTP로 수정 (wget/curl 미탑재). package-lock.json 생성으로 npm ci 빌드 오류 해결. .env.example 신규 작성 (모든 환경변수 포함, KISTA_URL 포함). docker compose build 양쪽 성공 + playwright-server healthy 상태 확인. fida 이미지 빌드 성공 (실행은 실제 서비스 계정 JSON 필요).",
+      "completedAt": "2026-04-28T06:27:19.253Z"
     }
   ]
 }
