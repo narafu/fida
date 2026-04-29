@@ -12,6 +12,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./gradlew bootRun --args='--spring.profiles.active=local'  # 로컬 실행
 docker compose up --build                # 컨테이너 빌드 및 실행
 docker compose build <service> && docker compose up -d --force-recreate <service>  # 설정 변경 후 이미지 재빌드 + 컨테이너 강제 재생성
+docker compose build --no-cache <service>        # 소스 변경 후 캐시 의심 시 강제 재빌드
+docker run --rm -e KEY=val ... <image>           # 컨테이너 기동 오류 빠른 확인
 ```
 
 ## Architecture
@@ -39,12 +41,13 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 - Virtual Threads 활성화 (`spring.threads.virtual.enabled=true`)
 - springdoc **2.7.0 이상** 필요 — 2.6.x는 Spring Boot 3.4.x(Spring Framework 6.2)와 `NoSuchMethodError: ControllerAdviceBean` 충돌. 현재 `springdoc = "2.6.0"` → **2.8.4로 업그레이드 필요** (`gradle/libs.versions.toml`)
 - Docker: ZGC + MaxRAMPercentage=75.0, non-root 실행
+- 외부 파일/자격증명을 읽는 `@Bean`(예: GoogleSheetsConfig): `@Bean @Lazy` + `@Component @Lazy` + 주입 지점 `@Lazy InterfacePort` 3단 설정 필수 — 하나라도 빠지면 Spring 기동 시 파일 읽기 실패
 
 ## Current Status
 
-- `docker-compose.yml` — starter-kit 기준 (postgres/grafana 포함). 태스크 #11에서 교체 예정 (fida + playwright-server 2개 서비스)
-- 소스 코드: 프로젝트 초기화 완료. 도메인·어댑터 구현은 미완 (태스크 #3~#10 pending)
+- 소스 코드: **모든 구현 완료** (KistaAdapter, FidaOrderController 포함 12개 태스크 completed)
 - 구현 태스크는 shrimp-task-manager로 관리 중 (`list_tasks`로 확인)
+- 다음 단계: springdoc 2.8.4 업그레이드, OCI 배포, KISTA 프로젝트 시작
 
 ## Task Management
 
@@ -54,6 +57,7 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 - pending 태스크도 실제 코드가 이미 구현되어 있을 수 있으므로, `execute_task` 전에 현재 파일 상태 확인 권장
 - 규칙 초기화/변경 시: `init_project_rules` → `process_thought` → `split_tasks`
 - 태스크 추가: `split_tasks` with `updateMode: append`
+- 태스크 의존성 고아 발생 시 (split_tasks 재실행 후 stale ID 참조): `update_task(taskId, dependencies: [])` 로 수정
 
 ## Environment Variables
 
@@ -77,6 +81,13 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 | `ParsedOrder` 필드 변경 | `GeminiVisionAdapter` 파싱 로직 동기화 |
 | `TradingRecord` 필드 변경 | `GoogleSheetsAdapter`, `TelegramAdapter` 메시지 포맷 |
 | 새 환경변수 추가 | `.env.example` 반드시 업데이트 |
+| 옵셔널 아웃바운드 어댑터 추가 | `application.yml`에 `url: ${VAR:}` 추가 + `@ConditionalOnProperty("x.url")` + 포트를 `Optional<XxxPort>`로 주입 |
+
+## playwright-server Gotchas
+
+- `node:20-slim`에 `wget`/`curl` 없음 → healthcheck는 `["CMD","node","-e","require('http').get('http://localhost:3000/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]`
+- `npm ci`는 `package-lock.json` 필수 → 없으면 `playwright-server/`에서 `npm install --package-lock-only`로 생성
+- `.gitignore`의 `.env*` 패턴이 `.env.example`도 차단 → `!.env.example` 예외 필요
 
 ## Design Reference
 
