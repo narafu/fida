@@ -38,6 +38,7 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 - Gemini 모델: `gemini-2.5-flash-lite` 고정
 - 스케줄: 화~토 07:00 KST (`cron = "0 0 7 * * TUE-SAT"`, 변경 금지)
 - Google Sheets 셀 범위 고정: `A1, C2:D4, C5:D7, A8, C8, D8`
+  - **A8 = "현사이클 시작"** (`current_cycle_start`) — "잔금(cash_balance)"과 혼동 금지
 - Virtual Threads 활성화 (`spring.threads.virtual.enabled=true`)
 - springdoc **2.7.0 이상** 필요 — 2.6.x는 Spring Boot 3.4.x(Spring Framework 6.2)와 `NoSuchMethodError: ControllerAdviceBean` 충돌. 현재 `springdoc = "2.6.0"` → **2.8.4로 업그레이드 필요** (`gradle/libs.versions.toml`)
 - Docker: ZGC + MaxRAMPercentage=75.0, non-root 실행
@@ -74,6 +75,7 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 
 ## Design Reference
 
+- n8n 원본 프로젝트 (비교 참조용): https://github.com/narafu/fanding-auto.git
 - 전체 설계: `/home/user/.claude/plans/fanding-auto-trade-kis-n8n-linked-fountain.md` (FIDA 섹션)
 - 프로젝트 규칙 상세: `shrimp-rules.md` (Task Manager 자동 참조)
 - 어댑터 규칙 + File Interaction Rules: `src/main/java/com/fida/adapter/CLAUDE.md`

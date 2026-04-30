@@ -63,7 +63,7 @@ public class GoogleSheetsAdapter implements SheetPort {
             data.add(cell("C" + row, fmt(sell.get(i).price())));
             data.add(cell("D" + row, fmtQty(sell.get(i).qty())));
         }
-        data.add(cell("A8", fmt(record.order().cashBalance())));
+        data.add(cell("A8", fmt(record.order().currentCycleStart())));
         data.add(cell("C8", fmt(record.order().avgPrice())));
         data.add(cell("D8", String.valueOf(record.order().holdings())));
         return data;

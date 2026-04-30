@@ -8,7 +8,7 @@ import java.util.List;
 public record ParsedOrder(
         List<OrderItem> buyOrders,
         List<OrderItem> sellOrders,
-        @Nullable BigDecimal cashBalance,
+        @Nullable BigDecimal currentCycleStart,
         @Nullable BigDecimal avgPrice,
         int holdings
 ) {}

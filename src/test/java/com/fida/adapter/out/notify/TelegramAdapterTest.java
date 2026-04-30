@@ -46,7 +46,7 @@ class TelegramAdapterTest {
     }
 
     @Test
-    @DisplayName("매수·매도·잔금·평단·보유개수가 포함된 메시지가 생성된다")
+    @DisplayName("매수·매도·현사이클시작·평단·보유개수가 포함된 메시지가 생성된다")
     void buildMessage_includes_all_fields() {
         ParsedOrder order = new ParsedOrder(
                 List.of(new OrderItem(new BigDecimal("75000"), "100")),
@@ -65,7 +65,7 @@ class TelegramAdapterTest {
         assertThat(msg).contains("  1. $75000 × 100");
         assertThat(msg).contains("📉 매도:");
         assertThat(msg).contains("  1. $80000 × 50");
-        assertThat(msg).contains("💵 잔금: $1000000");
+        assertThat(msg).contains("💵 현사이클 시작: $1000000");
         assertThat(msg).contains("📊 평단: $72000 | 보유: 200개");
     }
 
@@ -93,12 +93,12 @@ class TelegramAdapterTest {
     }
 
     @Test
-    @DisplayName("잔금·평단이 null이면 '-'로 표시된다")
+    @DisplayName("현사이클시작·평단이 null이면 '-'로 표시된다")
     void buildMessage_null_summary_shows_dash() {
         ParsedOrder order = new ParsedOrder(List.of(), List.of(), null, null, 0);
         String msg = adapter.buildMessage(recordWith(order));
 
-        assertThat(msg).contains("💵 잔금: $-");
+        assertThat(msg).contains("💵 현사이클 시작: $-");
         assertThat(msg).contains("📊 평단: $- |");
     }
 

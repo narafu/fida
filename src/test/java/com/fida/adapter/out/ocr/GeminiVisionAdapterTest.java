@@ -40,7 +40,7 @@ class GeminiVisionAdapterTest {
                 {
                   "candidates": [{
                     "content": {
-                      "parts": [{"text": "{\\"buy\\":[{\\"price\\":75000,\\"qty\\":100}],\\"sell\\":[{\\"price\\":80000,\\"qty\\":\\"ALL\\"}],\\"cash_balance\\":1000000,\\"avg_price\\":72000,\\"holdings\\":200}"}]
+                      "parts": [{"text": "{\\"buy\\":[{\\"price\\":75000,\\"qty\\":100}],\\"sell\\":[{\\"price\\":80000,\\"qty\\":\\"ALL\\"}],\\"current_cycle_start\\":1000000,\\"avg_price\\":72000,\\"holdings\\":200}"}]
                     }
                   }]
                 }
@@ -57,7 +57,7 @@ class GeminiVisionAdapterTest {
         assertThat(result.buyOrders().get(0).qty()).isEqualTo("100");
         assertThat(result.sellOrders()).hasSize(1);
         assertThat(result.sellOrders().get(0).qty()).isEqualTo("ALL");
-        assertThat(result.cashBalance()).isEqualByComparingTo(new BigDecimal("1000000"));
+        assertThat(result.currentCycleStart()).isEqualByComparingTo(new BigDecimal("1000000"));
         assertThat(result.avgPrice()).isEqualByComparingTo(new BigDecimal("72000"));
         assertThat(result.holdings()).isEqualTo(200);
         mockServer.verify();
@@ -67,7 +67,7 @@ class GeminiVisionAdapterTest {
     @DisplayName("```json 블록으로 감싸인 응답도 파싱한다")
     void analyze_parses_json_fenced_block() {
         String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"```json\\n{\\"buy\\":[],\\"sell\\":[],\\"cash_balance\\":null,\\"avg_price\\":null,\\"holdings\\":0}\\n```"}]}}]}
+                {"candidates":[{"content":{"parts":[{"text":"```json\\n{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holdings\\":0}\\n```"}]}}]}
                 """;
         mockServer.expect(requestToUriTemplate(
                 "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={key}",
@@ -84,7 +84,7 @@ class GeminiVisionAdapterTest {
     @DisplayName("holdings가 음수이면 0으로 보정한다")
     void analyze_corrects_negative_holdings_to_zero() {
         String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"cash_balance\\":null,\\"avg_price\\":72000,\\"holdings\\":-5}"}]}}]}
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":72000,\\"holdings\\":-5}"}]}}]}
                 """;
         mockServer.expect(requestToUriTemplate(
                 "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={key}",
@@ -101,7 +101,7 @@ class GeminiVisionAdapterTest {
     @DisplayName("holdings가 0이면 avgPrice를 null로 강제한다")
     void analyze_nullifies_avgPrice_when_holdings_zero() {
         String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"cash_balance\\":null,\\"avg_price\\":72000,\\"holdings\\":0}"}]}}]}
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":72000,\\"holdings\\":0}"}]}}]}
                 """;
         mockServer.expect(requestToUriTemplate(
                 "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={key}",

@@ -27,7 +27,7 @@ public class GeminiVisionAdapter implements OcrPort {
 
     private static final String PROMPT =
             "이 이미지는 주식 거래 기록입니다. 아래 JSON 형식으로만 응답하세요 (다른 텍스트 없이 JSON만):\n" +
-            "{\"buy\":[{\"price\":매수가격,\"qty\":매수수량}],\"sell\":[{\"price\":매도가격,\"qty\":매도수량}],\"cash_balance\":잔금,\"avg_price\":평단,\"holdings\":보유개수}\n\n" +
+            "{\"buy\":[{\"price\":매수가격,\"qty\":매수수량}],\"sell\":[{\"price\":매도가격,\"qty\":매도수량}],\"current_cycle_start\":현사이클시작,\"avg_price\":평단,\"holdings\":보유개수}\n\n" +
             "[테이블 구조 규칙]\n" +
             "- 이미지에 \"Limit Vwap\" 블록이 두 개 있음\n" +
             "- 첫 번째 블록 헤더가 \"매수가\"이면 → buy 배열에 입력 (최대 3행)\n" +
@@ -38,7 +38,7 @@ public class GeminiVisionAdapter implements OcrPort {
             "- 데이터 없거나 \"-\"이면 null\n" +
             "- \"남은전부\"/\"전부\"/\"ALL\"은 \"ALL\"\n" +
             "- 달러기호($)/콤마(,) 제거하고 숫자만, 소수점 유지\n" +
-            "- cash_balance: 이미지에서 \"잔금 $\" 항목의 값\n" +
+            "- current_cycle_start: 이미지에서 \"현사이클 시작 $\" 항목의 값\n" +
             "- avg_price: 이미지 오른쪽 \"평단\" 라벨 옆 셀 값만 사용. 비어있거나 보유개수가 0이면 null. 종가/현재가 등 다른 가격 사용 금지\n" +
             "- holdings: 이미지 하단 \"보유개수\" 라벨 옆 값 사용 (\"매수개수\" 사용 금지). 반드시 0 이상의 정수이며 음수가 될 수 없음. 음수로 보이면 0으로 반환";
 
@@ -107,7 +107,7 @@ public class GeminiVisionAdapter implements OcrPort {
             BigDecimal avgPrice = (holdings == 0) ? null : raw.avgPrice();
             List<OrderItem> buyOrders = toOrderItems(raw.buy());
             List<OrderItem> sellOrders = toOrderItems(raw.sell());
-            return new ParsedOrder(buyOrders, sellOrders, raw.cashBalance(), avgPrice, holdings);
+            return new ParsedOrder(buyOrders, sellOrders, raw.currentCycleStart(), avgPrice, holdings);
         } catch (Exception e) {
             throw new OcrException("Gemini JSON 파싱 실패: " + text.substring(0, Math.min(300, text.length())), e);
         }
@@ -139,7 +139,7 @@ public class GeminiVisionAdapter implements OcrPort {
     record GeminiOrderResult(
             List<RawOrderItem> buy,
             List<RawOrderItem> sell,
-            @com.fasterxml.jackson.annotation.JsonProperty("cash_balance") BigDecimal cashBalance,
+            @com.fasterxml.jackson.annotation.JsonProperty("current_cycle_start") BigDecimal currentCycleStart,
             @com.fasterxml.jackson.annotation.JsonProperty("avg_price") BigDecimal avgPrice,
             Integer holdings
     ) {}

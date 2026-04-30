@@ -46,7 +46,7 @@ public class TelegramAdapter implements NotifyPort {
                "📅 " + record.date() + "\n\n" +
                "📈 매수:\n" + formatLines(order.buyOrders()) + "\n\n" +
                "📉 매도:\n" + formatLines(order.sellOrders()) + "\n\n" +
-               "💵 잔금: $" + fmt(order.cashBalance()) + "\n" +
+               "💵 현사이클 시작: $" + fmt(order.currentCycleStart()) + "\n" +
                "📊 평단: $" + fmt(order.avgPrice()) + " | 보유: " + order.holdings() + "개";
     }
 

@@ -39,7 +39,7 @@ class DomainModelTest {
     }
 
     @Test
-    @DisplayName("ParsedOrder는 매수/매도 목록과 잔고 정보를 담는다")
+    @DisplayName("ParsedOrder는 매수/매도 목록과 현사이클 시작 정보를 담는다")
     void parsedOrder_holds_buy_sell_and_balance() {
         var buy = new OrderItem(new BigDecimal("75000"), "100");
         var sell = new OrderItem(new BigDecimal("80000"), "ALL");
@@ -50,7 +50,7 @@ class DomainModelTest {
 
         assertThat(order.buyOrders()).hasSize(1);
         assertThat(order.sellOrders()).hasSize(1);
-        assertThat(order.cashBalance()).isEqualByComparingTo(new BigDecimal("1000000"));
+        assertThat(order.currentCycleStart()).isEqualByComparingTo(new BigDecimal("1000000"));
         assertThat(order.avgPrice()).isEqualByComparingTo(new BigDecimal("72000"));
         assertThat(order.holdings()).isEqualTo(200);
     }
