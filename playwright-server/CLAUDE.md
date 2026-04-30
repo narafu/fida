@@ -2,6 +2,13 @@
 
 Node.js 사이드카 — Java로 이식 금지.
 
+## Commands
+
+```bash
+node scrape-server.js   # HTTP 서버 기동 (포트 3000)
+node scrape-fanding.js  # 스크래퍼 직접 실행 (디버그용)
+```
+
 ## Gotchas
 
 - `node:20-slim`에 `wget`/`curl` 없음 → healthcheck는 `["CMD","node","-e","require('http').get('http://localhost:3000/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]`

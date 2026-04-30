@@ -5,11 +5,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-./gradlew build                          # 컴파일 + 테스트 + JAR
-./gradlew test                           # 전체 테스트 (JUnit 5, 병렬 실행)
-./gradlew test --tests "com.fida.architecture.HexagonalArchitectureTest"  # 아키텍처 규칙만
-./gradlew bootJar                        # app.jar 빌드 (테스트 생략)
-./gradlew bootRun --args='--spring.profiles.active=local'  # 로컬 실행
+bash gradlew build                       # 컴파일 + 테스트 + JAR
+bash gradlew test                        # 전체 테스트 (JUnit 5, 병렬 실행)
+bash gradlew test --tests "com.fida.architecture.HexagonalArchitectureTest"  # 아키텍처 규칙만
+bash gradlew bootJar                     # app.jar 빌드 (테스트 생략)
+bash gradlew bootRun --args='--spring.profiles.active=local'  # 로컬 실행
 docker compose up --build                # 컨테이너 빌드 및 실행
 docker compose build <service> && docker compose up -d --force-recreate <service>  # 설정 변경 후 이미지 재빌드 + 컨테이너 강제 재생성
 docker compose build --no-cache <service>        # 소스 변경 후 캐시 의심 시 강제 재빌드
@@ -73,7 +73,7 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 | `GOOGLE_SERVICE_ACCOUNT_JSON_PATH` | `/secrets/service-account.json` |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | 텔레그램 알림 |
 | `SCRAPER_URL` | `http://playwright-server:3000/scrape` |
-| `KISTA_URL` | 미설정 시 KISTA 연동 생략 |
+| `KISTA_URL` | 미설정(빈 문자열 기본값) 시 KistaAdapter Bean 미등록, KISTA 연동 완전 생략 |
 
 ## Design Reference
 
