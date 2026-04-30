@@ -34,20 +34,22 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 
 ## Key Constraints
 
+- FIDA 서버 포트: **7070** (KISTA가 8080 사용 중). 포트 변경 시 3곳 동기화 필요: `application.yml`, `Dockerfile EXPOSE`, `docker-compose.yml` healthcheck URL
 - DB 없음 (JPA/DataSource 추가 금지), RestTemplate 전용 (WebClient 금지)
 - Gemini 모델: `gemini-2.5-flash-lite` 고정
 - 스케줄: 화~토 07:00 KST (`cron = "0 0 7 * * TUE-SAT"`, 변경 금지)
 - Google Sheets 셀 범위 고정: `A1, C2:D4, C5:D7, A8, C8, D8`
   - **A8 = "현사이클 시작"** (`current_cycle_start`) — "잔금(cash_balance)"과 혼동 금지
 - Virtual Threads 활성화 (`spring.threads.virtual.enabled=true`)
-- springdoc **2.7.0 이상** 필요 — 2.6.x는 Spring Boot 3.4.x(Spring Framework 6.2)와 `NoSuchMethodError: ControllerAdviceBean` 충돌. 현재 `springdoc = "2.6.0"` → **2.8.4로 업그레이드 필요** (`gradle/libs.versions.toml`)
+- springdoc = "2.8.4" (`gradle/libs.versions.toml`) — 2.6.x는 Spring Boot 3.4.x(Spring Framework 6.2)와 `NoSuchMethodError: ControllerAdviceBean` 충돌 있어 2.7.0+ 유지 필요
 - Docker: ZGC + MaxRAMPercentage=75.0, non-root 실행
 
 ## Current Status
 
 - 소스 코드: **모든 구현 완료** (KistaAdapter, FidaOrderController 포함 12개 태스크 completed)
 - 구현 태스크는 shrimp-task-manager로 관리 중 (`list_tasks`로 확인)
-- 다음 단계: springdoc 2.8.4 업그레이드, OCI 배포, KISTA 프로젝트 시작
+- 다음 단계: OCI 배포
+- KISTA 프로젝트: https://github.com/narafu/kista.git (별도 프로젝트, FIDA가 전송한 주문을 수신해 KIS API로 실행)
 
 ## Task Management
 

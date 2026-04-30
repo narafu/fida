@@ -26,6 +26,6 @@ ENV JAVA_OPTS="-XX:MaxRAMPercentage=75.0 \
                -XX:+UseZGC \
                -Djava.security.egd=file:/dev/./urandom"
 
-EXPOSE 8080
+EXPOSE 7070
 
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
