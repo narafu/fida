@@ -44,6 +44,10 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 - springdoc = "2.8.4" (`gradle/libs.versions.toml`) — 2.6.x는 Spring Boot 3.4.x(Spring Framework 6.2)와 `NoSuchMethodError: ControllerAdviceBean` 충돌 있어 2.7.0+ 유지 필요
 - Docker: ZGC + MaxRAMPercentage=75.0, non-root 실행
 - Mockito로 RestTemplate 테스트 시: `postForObject`는 varargs(`Object... uriVars`)가 있어 URL 매처로 `any()` 대신 `anyString()` 사용 필요
+- Lombok `1.18.36` 적용됨 — `@RequiredArgsConstructor` + `@Slf4j` 사용
+  - `@Value` 설정 필드는 **non-final** (필드 주입): Spring이 Lombok 생성 생성자 파라미터에서 `@Value`를 인식 못하는 문제 회피
+  - 어댑터 테스트에서 non-final `@Value` 필드 값 설정: `ReflectionTestUtils.setField(adapter, "fieldName", value)`
+  - `TradingRecordService`는 `@Lazy SheetPort` 파라미터 때문에 `@RequiredArgsConstructor` 미적용 — 명시적 생성자 유지
 
 ## Current Status
 
@@ -51,7 +55,7 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 - 구현 태스크는 shrimp-task-manager로 관리 중 (`list_tasks`로 확인)
 - 다음 단계: OCI 배포
 - KISTA 프로젝트: https://github.com/narafu/kista.git (별도 프로젝트, FIDA가 전송한 주문을 수신해 KIS API로 실행)
-- **KISTA 주문 전송 현재 주석 처리 중** (`TradingRecordService.process()` 내 `kista.sendOrders()` 블록) — 시트 기록만 실행, 주문 전송 재개 시 주석 해제 필요
+- **KISTA 주문 전송 현재 주석 처리 중** (`TradingRecordService.process()` 내 `kista.sendOrders()` 블록) — 시트 기록만 실행, 주문 전송 재개 시 주석 해제 필요. `TradingRecordServiceTest` 2건 실패는 이로 인한 **의도적 실패** (수정 불필요)
 
 ## Task Management
 

@@ -6,6 +6,7 @@ import com.fida.domain.port.out.SheetPort;
 import com.google.api.services.sheets.v4.Sheets;
 import com.google.api.services.sheets.v4.model.BatchUpdateValuesRequest;
 import com.google.api.services.sheets.v4.model.ValueRange;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -17,20 +18,14 @@ import java.util.List;
 
 @Component
 @Lazy
+@RequiredArgsConstructor
 public class GoogleSheetsAdapter implements SheetPort {
 
     private final Sheets sheetsService;
-    private final String spreadsheetId;
-    private final String sheetName;
-
-    public GoogleSheetsAdapter(
-            Sheets sheetsService,
-            @Value("${google.sheets.spreadsheet-id}") String spreadsheetId,
-            @Value("${google.sheets.sheet-name}") String sheetName) {
-        this.sheetsService = sheetsService;
-        this.spreadsheetId = spreadsheetId;
-        this.sheetName = sheetName;
-    }
+    @Value("${google.sheets.spreadsheet-id}")
+    private String spreadsheetId;
+    @Value("${google.sheets.sheet-name}")
+    private String sheetName;
 
     @Override
     public void update(TradingRecord record) {

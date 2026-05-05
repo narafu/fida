@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestTemplate;
 
@@ -37,7 +38,9 @@ class TelegramAdapterTest {
     void setUp() {
         restTemplate = new RestTemplateBuilder().build();
         mockServer = MockRestServiceServer.createServer(restTemplate);
-        adapter = new TelegramAdapter(restTemplate, BOT_TOKEN, CHAT_ID);
+        adapter = new TelegramAdapter(restTemplate);
+        ReflectionTestUtils.setField(adapter, "botToken", BOT_TOKEN);
+        ReflectionTestUtils.setField(adapter, "chatId", CHAT_ID);
     }
 
     private TradingRecord recordWith(ParsedOrder order) {

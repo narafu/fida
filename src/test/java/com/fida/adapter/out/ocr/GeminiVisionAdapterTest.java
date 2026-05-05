@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestTemplate;
 
@@ -30,7 +31,8 @@ class GeminiVisionAdapterTest {
     void setUp() {
         restTemplate = new RestTemplate();
         mockServer = MockRestServiceServer.createServer(restTemplate);
-        adapter = new GeminiVisionAdapter(restTemplate, API_KEY);
+        adapter = new GeminiVisionAdapter(restTemplate);
+        ReflectionTestUtils.setField(adapter, "apiKey", API_KEY);
     }
 
     @Test

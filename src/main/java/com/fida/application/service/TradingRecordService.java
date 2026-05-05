@@ -7,17 +7,15 @@ import com.fida.domain.port.out.NotifyPort;
 import com.fida.domain.port.out.OcrPort;
 import com.fida.domain.port.out.ScraperPort;
 import com.fida.domain.port.out.SheetPort;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
 
+@Slf4j
 @Service
 public class TradingRecordService implements ProcessTradingRecordUseCase {
-
-    private static final Logger log = LoggerFactory.getLogger(TradingRecordService.class);
 
     private final ScraperPort scraper;
     private final OcrPort ocr;

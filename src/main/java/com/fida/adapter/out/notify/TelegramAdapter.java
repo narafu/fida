@@ -3,6 +3,7 @@ package com.fida.adapter.out.notify;
 import com.fida.domain.model.OrderItem;
 import com.fida.domain.model.TradingRecord;
 import com.fida.domain.port.out.NotifyPort;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
@@ -14,20 +15,14 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 @Component
+@RequiredArgsConstructor
 public class TelegramAdapter implements NotifyPort {
 
     private final RestTemplate restTemplate;
-    private final String botToken;
-    private final String chatId;
-
-    public TelegramAdapter(
-            RestTemplate restTemplate,
-            @Value("${telegram.bot-token}") String botToken,
-            @Value("${telegram.chat-id}") String chatId) {
-        this.restTemplate = restTemplate;
-        this.botToken = botToken;
-        this.chatId = chatId;
-    }
+    @Value("${telegram.bot-token}")
+    private String botToken;
+    @Value("${telegram.chat-id}")
+    private String chatId;
 
     @Override
     public void notify(TradingRecord record) {

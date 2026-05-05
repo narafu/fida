@@ -40,6 +40,10 @@ dependencies {
     // Observability
     implementation(libs.micrometer.prometheus)
 
+    // Lombok
+    annotationProcessor(libs.lombok)
+    testAnnotationProcessor(libs.lombok)
+
     // Testing
     testImplementation(libs.spring.boot.starter.test)
     testImplementation(libs.archunit.junit5)

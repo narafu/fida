@@ -2,6 +2,7 @@ package com.fida.adapter.out.scraper;
 
 import com.fida.domain.model.ScrapedPost;
 import com.fida.domain.port.out.ScraperPort;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
@@ -12,16 +13,12 @@ import java.util.Base64;
 import java.util.List;
 
 @Component
+@RequiredArgsConstructor
 public class FandingScraperAdapter implements ScraperPort {
 
     private final RestTemplate restTemplate;
-    private final String scraperUrl;
-
-    public FandingScraperAdapter(RestTemplate restTemplate,
-                                  @Value("${scraper.url}") String scraperUrl) {
-        this.restTemplate = restTemplate;
-        this.scraperUrl = scraperUrl;
-    }
+    @Value("${scraper.url}")
+    private String scraperUrl;
 
     @Override
     public ScrapedPost scrape() {

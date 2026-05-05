@@ -11,6 +11,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
@@ -33,7 +34,8 @@ class KistaAdapterTest {
 
     @BeforeEach
     void setUp() {
-        adapter = new KistaAdapter(restTemplate, "http://kista-server");
+        adapter = new KistaAdapter(restTemplate);
+        ReflectionTestUtils.setField(adapter, "kistaUrl", "http://kista-server");
     }
 
     private TradingRecord recordWith(List<OrderItem> buyOrders, List<OrderItem> sellOrders) {

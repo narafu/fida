@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fida.domain.model.OrderItem;
 import com.fida.domain.model.ParsedOrder;
 import com.fida.domain.port.out.OcrPort;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -20,6 +21,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Component
+@RequiredArgsConstructor
 public class GeminiVisionAdapter implements OcrPort {
 
     private static final String ENDPOINT =
@@ -44,16 +46,11 @@ public class GeminiVisionAdapter implements OcrPort {
 
     private static final Pattern JSON_FENCE = Pattern.compile("```(?:json)?\\s*([\\s\\S]*?)```");
 
-    private final RestTemplate restTemplate;
-    private final String apiKey;
-    private final ObjectMapper objectMapper;
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    public GeminiVisionAdapter(RestTemplate restTemplate,
-                                @Value("${gemini.api-key}") String apiKey) {
-        this.restTemplate = restTemplate;
-        this.apiKey = apiKey;
-        this.objectMapper = new ObjectMapper();
-    }
+    private final RestTemplate restTemplate;
+    @Value("${gemini.api-key}")
+    private String apiKey;
 
     @Override
     public ParsedOrder analyze(List<byte[]> images) {

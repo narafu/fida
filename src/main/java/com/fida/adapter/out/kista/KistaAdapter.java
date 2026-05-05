@@ -3,6 +3,7 @@ package com.fida.adapter.out.kista;
 import com.fida.domain.model.OrderItem;
 import com.fida.domain.model.TradingRecord;
 import com.fida.domain.port.out.KistaPort;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -12,18 +13,14 @@ import java.util.List;
 
 @Component
 @ConditionalOnProperty("kista.url")
+@RequiredArgsConstructor
 public class KistaAdapter implements KistaPort {
 
     private static final String SYMBOL = "SOXL";
 
     private final RestTemplate restTemplate;
-    private final String kistaUrl;
-
-    public KistaAdapter(RestTemplate restTemplate,
-                        @Value("${kista.url}") String kistaUrl) {
-        this.restTemplate = restTemplate;
-        this.kistaUrl = kistaUrl;
-    }
+    @Value("${kista.url}")
+    private String kistaUrl;
 
     @Override
     public void sendOrders(TradingRecord record) {

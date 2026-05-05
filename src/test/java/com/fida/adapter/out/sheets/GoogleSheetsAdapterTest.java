@@ -8,6 +8,7 @@ import com.google.api.services.sheets.v4.model.ValueRange;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -24,7 +25,9 @@ class GoogleSheetsAdapterTest {
 
     @BeforeEach
     void setUp() {
-        adapter = new GoogleSheetsAdapter(null, "test-id", SHEET_NAME);
+        adapter = new GoogleSheetsAdapter(null);
+        ReflectionTestUtils.setField(adapter, "spreadsheetId", "test-id");
+        ReflectionTestUtils.setField(adapter, "sheetName", SHEET_NAME);
     }
 
     private TradingRecord recordWith(ParsedOrder order) {
