@@ -69,7 +69,7 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 
 ## Secrets
 
-- `./secrets/service-account.json` — 로컬 원본: `/Users/phs/secret/google-sheet-secret.json` 복사. 디렉토리가 비어 있으면 스케줄러 실행 시 `FileNotFoundException` 발생
+- `./secrets/service-account.json` — 로컬 원본: `/Users/phs/secret/google-sheet-secret.json` 복사. 디렉토리가 비어 있으면 스케줄러 실행 시 `FileNotFoundException` 발생. `secrets/`는 `.gitignore`에 등록돼 있어 git에 올라가지 않음
 - Render 배포 시: 대시보드 → Secret Files → 경로 `/secrets/service-account.json`, 파일 내용 붙여넣기
 
 ## Environment Variables
