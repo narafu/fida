@@ -53,7 +53,7 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 
 - 소스 코드: **모든 구현 완료** (KistaAdapter, FidaOrderController 포함 12개 태스크 completed)
 - 구현 태스크는 shrimp-task-manager로 관리 중 (`list_tasks`로 확인)
-- 다음 단계: OCI 배포
+- 다음 단계: Render 배포 (OCI 자원 할당 실패로 변경)
 - KISTA 프로젝트: https://github.com/narafu/kista.git (별도 프로젝트, FIDA가 전송한 주문을 수신해 KIS API로 실행)
 - **KISTA 주문 전송 현재 주석 처리 중** (`TradingRecordService.process()` 내 `kista.sendOrders()` 블록) — 시트 기록만 실행, 주문 전송 재개 시 주석 해제 필요. `TradingRecordServiceTest` 2건 실패는 이로 인한 **의도적 실패** (수정 불필요)
 
@@ -66,6 +66,11 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 - 규칙 초기화/변경 시: `init_project_rules` → `process_thought` → `split_tasks`
 - 태스크 추가: `split_tasks` with `updateMode: append`
 - 태스크 의존성 고아 발생 시 (split_tasks 재실행 후 stale ID 참조): `update_task(taskId, dependencies: [])` 로 수정
+
+## Secrets
+
+- `./secrets/service-account.json` — 로컬 원본: `/Users/phs/secret/google-sheet-secret.json` 복사. 디렉토리가 비어 있으면 스케줄러 실행 시 `FileNotFoundException` 발생
+- Render 배포 시: 대시보드 → Secret Files → 경로 `/secrets/service-account.json`, 파일 내용 붙여넣기
 
 ## Environment Variables
 
