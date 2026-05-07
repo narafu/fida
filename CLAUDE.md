@@ -40,6 +40,7 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 - 스케줄: 화~토 07:00 KST (`cron = "0 0 7 * * TUE-SAT"`, 변경 금지)
 - Google Sheets 셀 범위 고정: `A1, C2:D4, C5:D7, A8, C8, D8`
   - **A8 = "현사이클 시작"** (`current_cycle_start`) — "잔금(cash_balance)"과 혼동 금지
+  - A1 날짜 결정: 제목 M/D 패턴 1순위 → scraper postDate 2순위 → `LocalDate.now()` 3순위 (`FandingScraperAdapter.resolveDateFromTitle()`)
 - Virtual Threads 활성화 (`spring.threads.virtual.enabled=true`)
 - springdoc = "2.8.4" (`gradle/libs.versions.toml`) — 2.6.x는 Spring Boot 3.4.x(Spring Framework 6.2)와 `NoSuchMethodError: ControllerAdviceBean` 충돌 있어 2.7.0+ 유지 필요
 - Docker: ZGC + MaxRAMPercentage=75.0, non-root 실행
@@ -53,7 +54,7 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 
 - 소스 코드: **모든 구현 완료** (KistaAdapter, FidaOrderController 포함 12개 태스크 completed)
 - 구현 태스크는 shrimp-task-manager로 관리 중 (`list_tasks`로 확인)
-- 다음 단계: OCI 배포
+- 다음 단계: Render 배포 (OCI 자원 할당 실패로 변경)
 - KISTA 프로젝트: https://github.com/narafu/kista.git (별도 프로젝트, FIDA가 전송한 주문을 수신해 KIS API로 실행)
 - **KISTA 주문 전송 현재 주석 처리 중** (`TradingRecordService.process()` 내 `kista.sendOrders()` 블록) — 시트 기록만 실행, 주문 전송 재개 시 주석 해제 필요. `TradingRecordServiceTest` 2건 실패는 이로 인한 **의도적 실패** (수정 불필요)
 
@@ -66,6 +67,11 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 - 규칙 초기화/변경 시: `init_project_rules` → `process_thought` → `split_tasks`
 - 태스크 추가: `split_tasks` with `updateMode: append`
 - 태스크 의존성 고아 발생 시 (split_tasks 재실행 후 stale ID 참조): `update_task(taskId, dependencies: [])` 로 수정
+
+## Secrets
+
+- `./secrets/service-account.json` — 로컬 원본: `/Users/phs/secret/google-sheet-secret.json` 복사. 디렉토리가 비어 있으면 스케줄러 실행 시 `FileNotFoundException` 발생. `secrets/`는 `.gitignore`에 등록돼 있어 git에 올라가지 않음
+- Render 배포 시: 대시보드 → Secret Files → 경로 `/secrets/service-account.json`, 파일 내용 붙여넣기
 
 ## Environment Variables
 
@@ -84,6 +90,7 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 ## Design Reference
 
 - n8n 원본 프로젝트 (비교 참조용): https://github.com/narafu/fanding-auto.git
+- fanding-auto 구현 파리티: 2026-05-07 전면 비교 완료. n8n의 `cash_balance`는 Gemini 프롬프트에 없어 항상 `-`이므로 FIDA의 `currentCycleStart` 표시가 올바름. 날짜 버그 외 추가 차이 없음
 - 전체 설계: `/home/user/.claude/plans/fanding-auto-trade-kis-n8n-linked-fountain.md` (FIDA 섹션)
 - 프로젝트 규칙 상세: `shrimp-rules.md` (Task Manager 자동 참조)
 - 어댑터 규칙 + File Interaction Rules: `src/main/java/com/fida/adapter/CLAUDE.md`

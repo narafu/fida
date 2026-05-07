@@ -10,6 +10,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.LocalDate;
 import java.util.Base64;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -86,5 +87,73 @@ class FandingScraperAdapterTest {
 
         assertThatThrownBy(() -> adapter.scrape())
                 .isInstanceOf(ScraperException.class);
+    }
+
+    @Test
+    @DisplayName("제목에 M/D 패턴 있으면 postDate보다 제목 날짜를 우선한다")
+    void scrape_prefers_title_date_over_postDate() {
+        byte[] imageBytes = {10, 20, 30};
+        String base64 = Base64.getEncoder().encodeToString(imageBytes);
+        String json = """
+                {
+                  "success": true,
+                  "postTitle": "Privacy 5/7 _ SOXL 매매기록",
+                  "postDate": "2026-05-06",
+                  "postUrl": "https://fanding.kr/post/2",
+                  "images": [{"base64": "%s", "mimeType": "image/png"}]
+                }
+                """.formatted(base64);
+
+        mockServer.expect(requestTo(SCRAPER_URL))
+                .andRespond(withSuccess(json, MediaType.APPLICATION_JSON));
+
+        ScrapedPost result = adapter.scrape();
+
+        assertThat(result.postDate()).isEqualTo(LocalDate.of(LocalDate.now().getYear(), 5, 7));
+    }
+
+    @Test
+    @DisplayName("제목에 M/D 패턴 없으면 postDate를 사용한다")
+    void scrape_falls_back_to_postDate_when_no_title_date() {
+        byte[] imageBytes = {10, 20, 30};
+        String base64 = Base64.getEncoder().encodeToString(imageBytes);
+        String json = """
+                {
+                  "success": true,
+                  "postTitle": "SOXL 매매기록",
+                  "postDate": "2026-05-06",
+                  "postUrl": "https://fanding.kr/post/3",
+                  "images": [{"base64": "%s", "mimeType": "image/png"}]
+                }
+                """.formatted(base64);
+
+        mockServer.expect(requestTo(SCRAPER_URL))
+                .andRespond(withSuccess(json, MediaType.APPLICATION_JSON));
+
+        ScrapedPost result = adapter.scrape();
+
+        assertThat(result.postDate()).isEqualTo(LocalDate.of(2026, 5, 6));
+    }
+
+    @Test
+    @DisplayName("제목에 M/D 없고 postDate도 없으면 오늘 날짜를 사용한다")
+    void scrape_falls_back_to_today_when_no_date_available() {
+        byte[] imageBytes = {10, 20, 30};
+        String base64 = Base64.getEncoder().encodeToString(imageBytes);
+        String json = """
+                {
+                  "success": true,
+                  "postTitle": "SOXL 매매기록",
+                  "postUrl": "https://fanding.kr/post/4",
+                  "images": [{"base64": "%s", "mimeType": "image/png"}]
+                }
+                """.formatted(base64);
+
+        mockServer.expect(requestTo(SCRAPER_URL))
+                .andRespond(withSuccess(json, MediaType.APPLICATION_JSON));
+
+        ScrapedPost result = adapter.scrape();
+
+        assertThat(result.postDate()).isEqualTo(LocalDate.now());
     }
 }
