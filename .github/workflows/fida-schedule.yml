@@ -1,0 +1,41 @@
+name: FIDA 자동 실행
+
+on:
+  schedule:
+    - cron: '0 22 * * 1-5'   # 화~토 07:00 KST (UTC 기준 월~금 22:00)
+  workflow_dispatch:           # GitHub UI에서 수동 트리거 가능
+
+jobs:
+  run-fida:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: service-account.json 생성
+        run: |
+          mkdir -p secrets
+          echo "${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON_B64 }}" | base64 -d > secrets/service-account.json
+
+      - name: .env 파일 생성
+        run: |
+          echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> .env
+          echo "FANDING_EMAIL=${{ secrets.FANDING_EMAIL }}" >> .env
+          echo "FANDING_PASSWORD=${{ secrets.FANDING_PASSWORD }}" >> .env
+          echo "GOOGLE_SHEETS_SPREADSHEET_ID=${{ secrets.GOOGLE_SHEETS_SPREADSHEET_ID }}" >> .env
+          echo "GOOGLE_SERVICE_ACCOUNT_JSON_PATH=/secrets/service-account.json" >> .env
+          echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" >> .env
+          echo "TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}" >> .env
+          echo "SCRAPER_URL=http://playwright-server:3000/scrape" >> .env
+          echo "KISTA_URL=" >> .env
+
+      - name: FIDA 실행
+        run: |
+          docker compose run --rm \
+            -e SPRING_PROFILES_ACTIVE=job \
+            -e SPRING_MAIN_WEB_APPLICATION_TYPE=none \
+            fida
+
+      - name: 정리
+        if: always()
+        run: docker compose down
