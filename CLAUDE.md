@@ -15,6 +15,8 @@ docker compose run --rm -e SPRING_PROFILES_ACTIVE=job -e SPRING_MAIN_WEB_APPLICA
 docker compose build <service> && docker compose up -d --force-recreate <service>  # 설정 변경 후 이미지 재빌드 + 컨테이너 강제 재생성
 docker compose build --no-cache <service>        # 소스 변경 후 캐시 의심 시 강제 재빌드
 docker run --rm -e KEY=val ... <image>           # 컨테이너 기동 오류 빠른 확인
+gh run list --repo narafu/fida --limit 5         # GitHub Actions 최근 실행 목록
+gh run view <run-id> --log-failed                # 실패 실행 로그 확인
 ```
 
 ## Architecture
@@ -57,8 +59,8 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 
 - 소스 코드: **모든 구현 완료** (KistaAdapter, FidaOrderController 포함 12개 태스크 completed)
 - 구현 태스크는 shrimp-task-manager로 관리 중 (`list_tasks`로 확인)
-- **GitHub Actions Cron 전환 완료** — `.github/workflows/fida-schedule.yml` (UTC `0 22 * * 1-5` = KST 화~토 07:00). Task 4(Secrets 등록 + 수동 트리거 검증)는 사용자 직접 수행 필요
-- GitHub Secrets 등록 시 service-account.json: `base64 -i /Users/phs/secret/google-sheet-secret.json | tr -d '\n'` → `GOOGLE_SERVICE_ACCOUNT_JSON_B64`로 등록
+- **GitHub Actions Cron 전환 완료 및 검증 완료** — `.github/workflows/fida-schedule.yml` (UTC `0 22 * * 1-5` = KST 화~토 07:00)
+- GitHub Secrets 등록 시 service-account.json: `base64 -i <경로>/service-account.json | tr -d '\n'` → `GOOGLE_SERVICE_ACCOUNT_JSON_B64`로 등록
 - KISTA 프로젝트: https://github.com/narafu/kista.git (별도 프로젝트, FIDA가 전송한 주문을 수신해 KIS API로 실행)
 - **KISTA 주문 전송 현재 주석 처리 중** (`TradingRecordService.process()` 내 `kista.sendOrders()` 블록) — 시트 기록만 실행, 주문 전송 재개 시 주석 해제 필요. `TradingRecordServiceTest` 2건 실패는 이로 인한 **의도적 실패** (수정 불필요)
 
@@ -88,8 +90,8 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 | `GOOGLE_SHEETS_SPREADSHEET_ID` | 시트 ID |
 | `GOOGLE_SERVICE_ACCOUNT_JSON_PATH` | `/secrets/service-account.json` |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | 텔레그램 알림 |
-| `SCRAPER_URL` | `http://playwright-server:3000/scrape` |
-| `KISTA_URL` | 미설정(빈 문자열 기본값) 시 KistaAdapter Bean 미등록, KISTA 연동 완전 생략 |
+| `SCRAPER_URL` | `application.yml` 기본값 `http://playwright-server:3000/scrape` — `.env` 설정 불필요 |
+| `KISTA_URL` | `application.yml` 기본값 빈 문자열, KistaAdapter Bean 미등록 — `.env` 설정 불필요 |
 
 ## Design Reference
 
