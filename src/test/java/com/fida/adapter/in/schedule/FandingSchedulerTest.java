@@ -3,6 +3,7 @@ package com.fida.adapter.in.schedule;
 import com.fida.domain.port.in.ProcessTradingRecordUseCase;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Scheduled;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -31,5 +32,14 @@ class FandingSchedulerTest {
         assertThat(annotation).isNotNull();
         assertThat(annotation.cron()).isEqualTo("0 0 7 * * TUE-SAT");
         assertThat(annotation.zone()).isEqualTo("Asia/Seoul");
+    }
+
+    @Test
+    @DisplayName("FandingScheduler는 @Profile(\"!job\")으로 job 프로필에서 비활성화되어야 한다")
+    void scheduler_is_disabled_in_job_profile() {
+        Profile profile = FandingScheduler.class.getAnnotation(Profile.class);
+
+        assertThat(profile).isNotNull();
+        assertThat(profile.value()).containsExactly("!job");
     }
 }
