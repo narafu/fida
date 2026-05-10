@@ -20,5 +20,6 @@ public class FandingRunner implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         log.info("FIDA one-shot 실행 시작");
         useCase.process();
+        log.info("FIDA one-shot 실행 완료");
     }
 }
