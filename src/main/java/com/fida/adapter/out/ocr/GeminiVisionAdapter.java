@@ -2,6 +2,8 @@ package com.fida.adapter.out.ocr;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fida.common.CommaBigDecimalDeserializer;
 import com.fida.domain.model.OrderItem;
 import com.fida.domain.model.ParsedOrder;
 import com.fida.domain.port.out.OcrPort;
@@ -136,8 +138,15 @@ public class GeminiVisionAdapter implements OcrPort {
     record GeminiOrderResult(
             List<RawOrderItem> buy,
             List<RawOrderItem> sell,
-            @com.fasterxml.jackson.annotation.JsonProperty("current_cycle_start") BigDecimal currentCycleStart,
-            @com.fasterxml.jackson.annotation.JsonProperty("avg_price") BigDecimal avgPrice,
+
+            @com.fasterxml.jackson.annotation.JsonProperty("current_cycle_start")
+            @JsonDeserialize(using = CommaBigDecimalDeserializer.class)
+            BigDecimal currentCycleStart,
+
+            @com.fasterxml.jackson.annotation.JsonProperty("avg_price")
+            @JsonDeserialize(using = CommaBigDecimalDeserializer.class)
+            BigDecimal avgPrice,
+
             Integer holdings
     ) {}
 
