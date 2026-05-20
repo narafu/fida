@@ -40,7 +40,7 @@ class KistaAdapterTest {
 
     private TradingRecord recordWith(List<OrderItem> buyOrders, List<OrderItem> sellOrders) {
         var post = new ScrapedPost("제목", LocalDate.now(), "https://example.com", List.of());
-        var order = new ParsedOrder(buyOrders, sellOrders, null, null, 0);
+        var order = new ParsedOrder(buyOrders, sellOrders, null, null, null, 0);
         return TradingRecord.of(post, order);
     }
 

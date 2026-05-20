@@ -38,7 +38,7 @@ class GoogleSheetsAdapterTest {
     @Test
     @DisplayName("날짜는 A1 셀에 매핑된다")
     void date_maps_to_A1() {
-        TradingRecord record = recordWith(new ParsedOrder(List.of(), List.of(), null, null, 0));
+        TradingRecord record = recordWith(new ParsedOrder(List.of(), List.of(), null, null, null, 0));
         List<ValueRange> ranges = adapter.buildRangeData(record);
 
         ValueRange a1 = findRange(ranges, SHEET_NAME + "!A1");
@@ -54,7 +54,7 @@ class GoogleSheetsAdapterTest {
                 new OrderItem(new BigDecimal("74000"), "50"),
                 new OrderItem(null, null)
         );
-        TradingRecord record = recordWith(new ParsedOrder(buy, List.of(), null, null, 150));
+        TradingRecord record = recordWith(new ParsedOrder(buy, List.of(), null, null, null, 150));
 
         List<ValueRange> ranges = adapter.buildRangeData(record);
 
@@ -70,7 +70,7 @@ class GoogleSheetsAdapterTest {
     @DisplayName("매도 수량 ALL은 그대로 유지된다")
     void sell_qty_ALL_preserved() {
         List<OrderItem> sell = List.of(new OrderItem(new BigDecimal("80000"), "ALL"));
-        TradingRecord record = recordWith(new ParsedOrder(List.of(), sell, null, null, 0));
+        TradingRecord record = recordWith(new ParsedOrder(List.of(), sell, null, null, null, 0));
 
         List<ValueRange> ranges = adapter.buildRangeData(record);
 
@@ -82,7 +82,7 @@ class GoogleSheetsAdapterTest {
     void summary_maps_to_A8_C8_D8() {
         ParsedOrder order = new ParsedOrder(
                 List.of(), List.of(),
-                new BigDecimal("1000000"), new BigDecimal("72000"), 200
+                new BigDecimal("1000000"), null, new BigDecimal("72000"), 200
         );
         TradingRecord record = recordWith(order);
 
@@ -96,7 +96,7 @@ class GoogleSheetsAdapterTest {
     @Test
     @DisplayName("null 값은 빈 문자열로 변환된다")
     void null_values_become_empty_string() {
-        TradingRecord record = recordWith(new ParsedOrder(List.of(), List.of(), null, null, 0));
+        TradingRecord record = recordWith(new ParsedOrder(List.of(), List.of(), null, null, null, 0));
 
         List<ValueRange> ranges = adapter.buildRangeData(record);
 
@@ -107,7 +107,7 @@ class GoogleSheetsAdapterTest {
     @Test
     @DisplayName("buildRangeData는 정확히 16개 범위를 반환한다")
     void buildRangeData_returns_16_ranges() {
-        TradingRecord record = recordWith(new ParsedOrder(List.of(), List.of(), null, null, 0));
+        TradingRecord record = recordWith(new ParsedOrder(List.of(), List.of(), null, null, null, 0));
         List<ValueRange> ranges = adapter.buildRangeData(record);
         assertThat(ranges).hasSize(16);
     }

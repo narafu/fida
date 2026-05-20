@@ -45,7 +45,7 @@ class DomainModelTest {
         var sell = new OrderItem(new BigDecimal("80000"), "ALL");
         var order = new ParsedOrder(
                 List.of(buy), List.of(sell),
-                new BigDecimal("1000000"), new BigDecimal("72000"), 200
+                new BigDecimal("1000000"), null, new BigDecimal("72000"), 200
         );
 
         assertThat(order.buyOrders()).hasSize(1);
@@ -58,7 +58,7 @@ class DomainModelTest {
     @Test
     @DisplayName("ParsedOrder holdings가 0이면 avgPrice는 null이어야 한다")
     void parsedOrder_avgPrice_is_null_when_holdings_zero() {
-        var order = new ParsedOrder(List.of(), List.of(), null, null, 0);
+        var order = new ParsedOrder(List.of(), List.of(), null, null, null, 0);
 
         assertThat(order.holdings()).isZero();
         assertThat(order.avgPrice()).isNull();
@@ -68,7 +68,7 @@ class DomainModelTest {
     @DisplayName("TradingRecord.of()는 ScrapedPost와 ParsedOrder로부터 생성된다")
     void tradingRecord_created_from_post_and_order() {
         var post = new ScrapedPost("매매표", LocalDate.of(2024, 1, 15), "https://fanding.kr/1", List.of());
-        var parsedOrder = new ParsedOrder(List.of(), List.of(), null, null, 0);
+        var parsedOrder = new ParsedOrder(List.of(), List.of(), null, null, null, 0);
 
         var record = TradingRecord.of(post, parsedOrder);
 

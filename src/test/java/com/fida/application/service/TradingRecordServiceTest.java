@@ -36,7 +36,7 @@ class TradingRecordServiceTest {
     private final ScrapedPost samplePost = new ScrapedPost(
             "매매표", LocalDate.of(2024, 1, 15), "https://fanding.kr/1", List.of(new byte[]{1}));
     private final ParsedOrder sampleOrder = new ParsedOrder(
-            List.of(), List.of(), null, null, 0);
+            List.of(), List.of(), null, null, null, 0);
 
     @Test
     @DisplayName("process()는 scrape → OCR → sheet 업데이트 → notify 순으로 실행된다")

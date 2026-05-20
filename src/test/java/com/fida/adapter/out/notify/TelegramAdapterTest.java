@@ -55,6 +55,7 @@ class TelegramAdapterTest {
                 List.of(new OrderItem(new BigDecimal("75000"), "100")),
                 List.of(new OrderItem(new BigDecimal("80000"), "50")),
                 new BigDecimal("1000000"),
+                null,
                 new BigDecimal("72000"),
                 200
         );
@@ -78,7 +79,7 @@ class TelegramAdapterTest {
         ParsedOrder order = new ParsedOrder(
                 List.of(),
                 List.of(new OrderItem(new BigDecimal("80000"), "ALL")),
-                null, null, 0
+                null, null, null, 0
         );
         String msg = adapter.buildMessage(recordWith(order));
 
@@ -88,7 +89,7 @@ class TelegramAdapterTest {
     @Test
     @DisplayName("매수·매도 주문이 없으면 '없음'이 표시된다")
     void buildMessage_empty_orders_show_없음() {
-        ParsedOrder order = new ParsedOrder(List.of(), List.of(), null, null, 0);
+        ParsedOrder order = new ParsedOrder(List.of(), List.of(), null, null, null, 0);
         String msg = adapter.buildMessage(recordWith(order));
 
         assertThat(msg).contains("📈 매수:\n  없음");
@@ -98,7 +99,7 @@ class TelegramAdapterTest {
     @Test
     @DisplayName("현사이클시작·평단이 null이면 '-'로 표시된다")
     void buildMessage_null_summary_shows_dash() {
-        ParsedOrder order = new ParsedOrder(List.of(), List.of(), null, null, 0);
+        ParsedOrder order = new ParsedOrder(List.of(), List.of(), null, null, null, 0);
         String msg = adapter.buildMessage(recordWith(order));
 
         assertThat(msg).contains("💵 현사이클 시작: $-");
@@ -111,7 +112,7 @@ class TelegramAdapterTest {
         ParsedOrder order = new ParsedOrder(
                 List.of(new OrderItem(null, null), new OrderItem(new BigDecimal("75000"), "100")),
                 List.of(),
-                null, null, 0
+                null, null, null, 0
         );
         String msg = adapter.buildMessage(recordWith(order));
 
@@ -126,7 +127,7 @@ class TelegramAdapterTest {
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withSuccess("{\"ok\":true}", MediaType.APPLICATION_JSON));
 
-        ParsedOrder order = new ParsedOrder(List.of(), List.of(), null, null, 0);
+        ParsedOrder order = new ParsedOrder(List.of(), List.of(), null, null, null, 0);
         adapter.notify(recordWith(order));
 
         mockServer.verify();
