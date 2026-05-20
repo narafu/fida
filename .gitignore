@@ -39,3 +39,7 @@ docker-compose.override.yml
 
 # mcp
 .mcp.json
+
+# Claude Code 로컬 메모 (개인 환경 특화)
+.claude.local.md
+.claude/settings.local.json
