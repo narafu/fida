@@ -1,5 +1,63 @@
 package com.fida.adapter.out.kista;
 
-import java.math.BigDecimal;
+import com.fida.domain.model.Order;
+import com.fida.domain.model.OrderItem;
+import com.fida.domain.model.TradingRecord;
+import lombok.extern.slf4j.Slf4j;
 
-record FidaOrderRequest(String symbol, String direction, Integer qty, BigDecimal price) {}
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Stream;
+
+@Slf4j
+record FidaOrderRequest(
+        LocalDate tradeDate,
+        String ticker,
+        BigDecimal currentCycleStart,
+        BigDecimal currentCycleRealizedPnl,
+        BigDecimal avgPrice,
+        int holdings,
+        List<Order> orders
+) {
+    public static FidaOrderRequest of(TradingRecord record, String ticker) {
+        var parsedOrder = record.order();
+
+        List<Order> orders = Stream.concat(
+                parsedOrder.buyOrders().stream().map(item -> toOrder(item, Order.OrderDirection.BUY)),
+                parsedOrder.sellOrders().stream().map(item -> toOrder(item, Order.OrderDirection.SELL))
+        ).toList();
+
+        return new FidaOrderRequest(
+                record.date(),
+                ticker,
+                Objects.requireNonNullElse(parsedOrder.currentCycleStart(), BigDecimal.ZERO),
+                Objects.requireNonNullElse(parsedOrder.currentCycleRealizedPnl(), BigDecimal.ZERO),
+                parsedOrder.avgPrice(),
+                parsedOrder.holdings(),
+                orders
+        );
+    }
+
+    private static Order toOrder(OrderItem item, Order.OrderDirection direction) {
+        return new Order(
+                Order.OrderType.LIMIT,
+                direction,
+                parseQty(item.qty()),
+                Objects.requireNonNullElse(item.price(), BigDecimal.ZERO)
+        );
+    }
+
+    private static int parseQty(String qty) {
+        if (qty == null || qty.isBlank()) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(qty.trim());
+        } catch (NumberFormatException e) {
+            log.warn("kista 전송을 위한 수량 파싱 실패 - 입력값: '{}'. 0개로 대체합니다.", qty, e);
+            return 0;
+        }
+    }
+}
