@@ -26,8 +26,25 @@ public class TelegramAdapter implements NotifyPort {
 
     @Override
     public void notify(TradingRecord record) {
+        sendText(buildMessage(record));
+    }
+
+    @Override
+    public void notifyKistaSuccess(TradingRecord record) {
+        var order = record.order();
+        int totalOrders = order.buyOrders().size() + order.sellOrders().size();
+        sendText("✅ KISTA 전송 완료\n📅 " + record.date() + "\n🎫 SOXL " + totalOrders + "건");
+    }
+
+    @Override
+    public void notifyKistaFailure(TradingRecord record, Exception cause) {
+        String reason = (cause.getMessage() != null) ? cause.getMessage() : "알 수 없는 오류";
+        sendText("❌ KISTA 전송 실패\n📅 " + record.date() + "\n사유: " + reason);
+    }
+
+    private void sendText(String message) {
         String url = "https://api.telegram.org/bot" + botToken + "/sendMessage";
-        Map<String, String> body = Map.of("chat_id", chatId, "text", buildMessage(record));
+        Map<String, String> body = Map.of("chat_id", chatId, "text", message);
         try {
             restTemplate.postForObject(url, body, String.class);
         } catch (Exception e) {
@@ -42,6 +59,7 @@ public class TelegramAdapter implements NotifyPort {
                "📈 매수:\n" + formatLines(order.buyOrders()) + "\n\n" +
                "📉 매도:\n" + formatLines(order.sellOrders()) + "\n\n" +
                "💵 현사이클 시작: $" + fmt(order.currentCycleStart()) + "\n" +
+               "💵 현사이클 실현수익: $" + fmt(order.currentCycleRealizedPnl()) + "\n" +
                "📊 평단: $" + fmt(order.avgPrice()) + " | 보유: " + order.holdings() + "개";
     }
 
