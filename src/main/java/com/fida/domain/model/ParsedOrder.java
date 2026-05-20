@@ -9,6 +9,7 @@ public record ParsedOrder(
         List<OrderItem> buyOrders,
         List<OrderItem> sellOrders,
         @Nullable BigDecimal currentCycleStart,
+        @Nullable BigDecimal currentCycleRealizedPnl,
         @Nullable BigDecimal avgPrice,
         int holdings
 ) {}

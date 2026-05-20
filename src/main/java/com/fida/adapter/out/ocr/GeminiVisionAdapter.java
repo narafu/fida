@@ -43,6 +43,7 @@ public class GeminiVisionAdapter implements OcrPort {
             "- \"남은전부\"/\"전부\"/\"ALL\"은 \"ALL\"\n" +
             "- 달러기호($)/콤마(,) 제거하고 숫자만, 소수점 유지\n" +
             "- current_cycle_start: 이미지에서 \"현사이클 시작 $\" 항목의 값\n" +
+            "- current_cycle_realized_pnl: 이미지에서 \"현사이클 실현수익 $\" 항목의 값. 음수일 수도 있음.\n" +
             "- avg_price: 이미지 오른쪽 \"평단\" 라벨 옆 셀 값만 사용. 비어있거나 보유개수가 0이면 null. 종가/현재가 등 다른 가격 사용 금지\n" +
             "- holdings: 이미지 하단 \"보유개수\" 라벨 옆 값 사용 (\"매수개수\" 사용 금지). 반드시 0 이상의 정수이며 음수가 될 수 없음. 음수로 보이면 0으로 반환";
 
@@ -106,7 +107,7 @@ public class GeminiVisionAdapter implements OcrPort {
             BigDecimal avgPrice = (holdings == 0) ? null : raw.avgPrice();
             List<OrderItem> buyOrders = toOrderItems(raw.buy());
             List<OrderItem> sellOrders = toOrderItems(raw.sell());
-            return new ParsedOrder(buyOrders, sellOrders, raw.currentCycleStart(), avgPrice, holdings);
+            return new ParsedOrder(buyOrders, sellOrders, raw.currentCycleStart(), raw.currentCycleRealizedPnl(), avgPrice, holdings);
         } catch (Exception e) {
             throw new OcrException("Gemini JSON 파싱 실패: " + text.substring(0, Math.min(300, text.length())), e);
         }
@@ -142,6 +143,10 @@ public class GeminiVisionAdapter implements OcrPort {
             @com.fasterxml.jackson.annotation.JsonProperty("current_cycle_start")
             @JsonDeserialize(using = CommaBigDecimalDeserializer.class)
             BigDecimal currentCycleStart,
+
+            @com.fasterxml.jackson.annotation.JsonProperty("current_cycle_realized_pnl")
+            @JsonDeserialize(using = CommaBigDecimalDeserializer.class)
+            BigDecimal currentCycleRealizedPnl,
 
             @com.fasterxml.jackson.annotation.JsonProperty("avg_price")
             @JsonDeserialize(using = CommaBigDecimalDeserializer.class)
