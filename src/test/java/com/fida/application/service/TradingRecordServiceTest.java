@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -105,5 +106,62 @@ class TradingRecordServiceTest {
 
         verify(sheetPort).update(any());
         verify(notifyPort).notify(any());
+    }
+
+    @Test
+    @DisplayName("KISTA 전송 성공 시 notifyKistaSuccess를 호출한다")
+    void process_notifies_kista_success_when_sendOrders_succeeds() {
+        when(scraperPort.scrape()).thenReturn(samplePost);
+        when(ocrPort.analyze(any())).thenReturn(sampleOrder);
+        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, Optional.of(kistaPort));
+
+        service.process();
+
+        verify(notifyPort).notifyKistaSuccess(any(TradingRecord.class));
+    }
+
+    @Test
+    @DisplayName("KISTA 전송 실패 시 notifyKistaFailure를 호출하고 서비스는 정상 완료한다")
+    void process_notifies_kista_failure_when_sendOrders_throws() {
+        when(scraperPort.scrape()).thenReturn(samplePost);
+        when(ocrPort.analyze(any())).thenReturn(sampleOrder);
+        var cause = new RuntimeException("KISTA 연결 오류");
+        doThrow(cause).when(kistaPort).sendOrders(any());
+        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, Optional.of(kistaPort));
+
+        service.process();
+
+        verify(notifyPort).notifyKistaFailure(any(TradingRecord.class), eq(cause));
+        verify(sheetPort).update(any());
+        verify(notifyPort).notify(any());
+    }
+
+    @Test
+    @DisplayName("KISTA 결과 알림 자체가 실패해도 서비스는 정상 완료한다")
+    void process_continues_when_kista_notification_throws() {
+        when(scraperPort.scrape()).thenReturn(samplePost);
+        when(ocrPort.analyze(any())).thenReturn(sampleOrder);
+        doThrow(new RuntimeException("알림 실패")).when(notifyPort).notifyKistaSuccess(any());
+        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, Optional.of(kistaPort));
+
+        service.process(); // 알림 실패해도 예외 전파 없이 완료
+
+        verify(sheetPort).update(any());
+        verify(notifyPort).notify(any());
+    }
+
+    @Test
+    @DisplayName("sheet.update는 KISTA 결과에 관계없이 항상 먼저 완료된다")
+    void process_sheet_update_always_precedes_kista() {
+        when(scraperPort.scrape()).thenReturn(samplePost);
+        when(ocrPort.analyze(any())).thenReturn(sampleOrder);
+        doThrow(new RuntimeException("KISTA 오류")).when(kistaPort).sendOrders(any());
+        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, Optional.of(kistaPort));
+
+        service.process();
+
+        var inOrder = inOrder(sheetPort, kistaPort);
+        inOrder.verify(sheetPort).update(any());
+        inOrder.verify(kistaPort).sendOrders(any());
     }
 }
