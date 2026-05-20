@@ -51,7 +51,7 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 - Spring Profile: `job` = `FandingRunner`(one-shot) 활성, `FandingScheduler` 비활성 / `!job`(기본) = 반대
 - Mockito로 RestTemplate 테스트 시: `postForObject`는 varargs(`Object... uriVars`)가 있어 URL 매처로 `any()` 대신 `anyString()` 사용 필요
 - Lombok `1.18.36` 적용됨 — `@RequiredArgsConstructor` + `@Slf4j` 사용
-  - `@Value` 설정 필드는 **non-final** (필드 주입): Spring이 Lombok 생성 생성자 파라미터에서 `@Value`를 인식 못하는 문제 회피
+  - `@Value` 설정 필드: `lombok.config`의 `lombok.copyableAnnotations += org.springframework.beans.factory.annotation.Value` 덕분에 **final 필드도 안전** (`KistaAdapter.kistaUrl` 등). 단, `TelegramAdapter` 등 일부는 non-final 유지 (기존 코드)
   - 어댑터 테스트에서 non-final `@Value` 필드 값 설정: `ReflectionTestUtils.setField(adapter, "fieldName", value)`
   - `TradingRecordService`는 `@Lazy SheetPort` 파라미터 때문에 `@RequiredArgsConstructor` 미적용 — 명시적 생성자 유지
 
@@ -62,7 +62,8 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 - **GitHub Actions Cron 전환 완료 및 검증 완료** — `.github/workflows/fida-schedule.yml` (UTC `0 22 * * 1-5` = KST 화~토 07:00)
 - GitHub Secrets 등록 시 service-account.json: `base64 -i <경로>/service-account.json | tr -d '\n'` → `GOOGLE_SERVICE_ACCOUNT_JSON_B64`로 등록
 - KISTA 프로젝트: https://github.com/narafu/kista.git (별도 프로젝트, FIDA가 전송한 주문을 수신해 KIS API로 실행)
-- **KISTA 주문 전송 현재 주석 처리 중** (`TradingRecordService.process()` 내 `kista.sendOrders()` 블록) — 시트 기록만 실행, 주문 전송 재개 시 주석 해제 필요. `TradingRecordServiceTest` 2건 실패는 이로 인한 **의도적 실패** (수정 불필요)
+- **KISTA 주문 전송 활성화됨** — `TradingRecordService.process()`: sheet 기록 → 매매 알림 → KISTA 전송 순서. KISTA 실패는 sheet/매매 알림에 영향 없음 (`safeNotify` 패턴)
+- **KISTA 전송 결과(성공/실패)는 별도 텔레그램 메시지로 알림** — 매매 알림과 독립된 2개의 메시지
 
 ## Task Management
 
@@ -102,5 +103,5 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 - 어댑터 규칙 + File Interaction Rules: `src/main/java/com/fida/adapter/CLAUDE.md`
 - 도메인 제약: `src/main/java/com/fida/domain/CLAUDE.md`
 - playwright-server 특이사항: `playwright-server/CLAUDE.md`
-- KISTA API 스펙: `POST /api/orders/fida` body `{symbol, direction(BUY|SELL), qty(optional), price}` — OpenAPI docs: `{KISTA_URL}/api-docs`
-- KISTA symbol: `"SOXL"` 고정 (`KistaAdapter` 상수)
+- KISTA API 스펙: `POST /api/orders/fida` body `{tradeDate, ticker, currentCycleStart, currentCycleRealizedPnl, avgPrice, holdings, orders[{orderType, direction, quantity, price}]}` — OpenAPI docs: `{KISTA_URL}/api-docs`
+- KISTA ticker: `"SOXL"` 고정 (`KistaAdapter` 상수). orders 배열은 BUY 먼저 SELL 나중 순서. null price → ZERO, null/비파싱 qty → 0 fallback

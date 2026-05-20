@@ -63,6 +63,20 @@ class PortContractTest {
     }
 
     @Test
+    @DisplayName("NotifyPort는 KISTA 성공 알림 메서드를 가진다")
+    void notifyPort_has_notifyKistaSuccess_method() throws NoSuchMethodException {
+        var method = NotifyPort.class.getMethod("notifyKistaSuccess", TradingRecord.class);
+        assertThat(method.getReturnType()).isEqualTo(void.class);
+    }
+
+    @Test
+    @DisplayName("NotifyPort는 KISTA 실패 알림 메서드를 가진다")
+    void notifyPort_has_notifyKistaFailure_method() throws NoSuchMethodException {
+        var method = NotifyPort.class.getMethod("notifyKistaFailure", TradingRecord.class, Exception.class);
+        assertThat(method.getReturnType()).isEqualTo(void.class);
+    }
+
+    @Test
     @DisplayName("모든 Port 인터페이스는 domain 패키지에 위치한다")
     void all_ports_reside_in_domain_package() {
         assertThat(ProcessTradingRecordUseCase.class.getPackageName())
