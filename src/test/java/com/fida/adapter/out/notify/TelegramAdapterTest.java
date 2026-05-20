@@ -19,6 +19,8 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
@@ -129,6 +131,53 @@ class TelegramAdapterTest {
 
         ParsedOrder order = new ParsedOrder(List.of(), List.of(), null, null, null, 0);
         adapter.notify(recordWith(order));
+
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("notifyKistaSuccess는 '✅ KISTA 전송 완료' 메시지를 Telegram API에 전송한다")
+    void notifyKistaSuccess_sends_success_message() {
+        mockServer.expect(requestTo(API_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("KISTA 전송 완료")))
+                .andRespond(withSuccess("{\"ok\":true}", MediaType.APPLICATION_JSON));
+
+        ParsedOrder order = new ParsedOrder(
+                List.of(new OrderItem(new BigDecimal("10.00"), "1")),
+                List.of(),
+                null, null, null, 0
+        );
+        adapter.notifyKistaSuccess(recordWith(order));
+
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("notifyKistaFailure는 '❌ KISTA 전송 실패'와 사유를 Telegram API에 전송한다")
+    void notifyKistaFailure_sends_failure_message_with_cause() {
+        mockServer.expect(requestTo(API_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("KISTA 전송 실패")))
+                .andExpect(content().string(containsString("연결 타임아웃")))
+                .andRespond(withSuccess("{\"ok\":true}", MediaType.APPLICATION_JSON));
+
+        ParsedOrder order = new ParsedOrder(List.of(), List.of(), null, null, null, 0);
+        adapter.notifyKistaFailure(recordWith(order), new RuntimeException("연결 타임아웃"));
+
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("notifyKistaFailure에서 cause.getMessage()가 null이면 '알 수 없는 오류'를 표시한다")
+    void notifyKistaFailure_uses_fallback_when_cause_message_is_null() {
+        mockServer.expect(requestTo(API_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("알 수 없는 오류")))
+                .andRespond(withSuccess("{\"ok\":true}", MediaType.APPLICATION_JSON));
+
+        ParsedOrder order = new ParsedOrder(List.of(), List.of(), null, null, null, 0);
+        adapter.notifyKistaFailure(recordWith(order), new RuntimeException((String) null));
 
         mockServer.verify();
     }
