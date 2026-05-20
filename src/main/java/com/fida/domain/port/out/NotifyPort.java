@@ -7,5 +7,5 @@ public interface NotifyPort {
 
     void notifyKistaSuccess(TradingRecord record);
 
-    void notifyKistaFailure(TradingRecord record, Throwable cause);
+    void notifyKistaFailure(TradingRecord record, Exception cause);
 }
