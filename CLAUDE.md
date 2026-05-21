@@ -51,7 +51,7 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 - Spring Profile: `job` = `FandingRunner`(one-shot) 활성, `FandingScheduler` 비활성 / `!job`(기본) = 반대
 - Mockito로 RestTemplate 테스트 시: `postForObject`는 varargs(`Object... uriVars`)가 있어 URL 매처로 `any()` 대신 `anyString()` 사용 필요
 - Lombok `1.18.36` 적용됨 — `@RequiredArgsConstructor` + `@Slf4j` 사용
-  - `@Value` 설정 필드: `lombok.config`의 `lombok.copyableAnnotations += org.springframework.beans.factory.annotation.Value` 덕분에 **final 필드도 안전** (`KistaAdapter.kistaUrl` 등). 단, `TelegramAdapter` 등 일부는 non-final 유지 (기존 코드)
+  - `@Value` 설정 필드: **non-final로 선언할 것** — `copyableAnnotations`가 CI 환경에서 적용되지 않아 `final`+`@Value` 조합은 GitHub Actions에서 `No qualifying bean of type 'String'` 오류 발생. `@RequiredArgsConstructor`에서 제외되고 Spring이 필드 주입으로 처리함 (`KistaAdapter`, `TelegramAdapter` 모두 non-final)
   - 어댑터 테스트에서 non-final `@Value` 필드 값 설정: `ReflectionTestUtils.setField(adapter, "fieldName", value)`
   - `TradingRecordService`는 `@Lazy SheetPort` 파라미터 때문에 `@RequiredArgsConstructor` 미적용 — 명시적 생성자 유지
 

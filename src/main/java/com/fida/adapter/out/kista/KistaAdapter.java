@@ -24,9 +24,9 @@ public class KistaAdapter implements KistaPort {
     private final RestTemplate restTemplate;
 
     @Value("${kista.url}")
-    private final String baseUrl;
+    private String baseUrl;
     @Value("${kista.internal-token}")
-    private final String internalApiToken;
+    private String internalApiToken;
 
     @Override
     public void sendOrders(TradingRecord record) {
