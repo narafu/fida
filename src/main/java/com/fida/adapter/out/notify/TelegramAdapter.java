@@ -11,6 +11,7 @@ import org.springframework.web.client.RestTemplate;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -30,10 +31,11 @@ public class TelegramAdapter implements NotifyPort {
     }
 
     @Override
-    public void notifyKistaSuccess(TradingRecord record) {
+    public void notifyKistaSuccess(TradingRecord record, UUID savedId) {
         var order = record.order();
         int totalOrders = order.buyOrders().size() + order.sellOrders().size();
-        sendText("✅ KISTA 전송 완료\n📅 " + record.date() + "\n🎫 SOXL " + totalOrders + "건");
+        String idStr = savedId != null ? savedId.toString().substring(0, 8) + "..." : "-";
+        sendText("✅ KISTA 저장 완료\n📅 " + record.date() + "\n🆔 " + idStr + "\n🎫 SOXL " + totalOrders + "건");
     }
 
     @Override

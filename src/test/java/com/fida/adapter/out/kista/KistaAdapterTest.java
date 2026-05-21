@@ -12,30 +12,42 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpEntity;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
+import java.util.UUID;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("KistaAdapter 테스트")
 class KistaAdapterTest {
 
     private static final String KISTA_URL = "http://kista-server";
-    private static final String EXPECTED_URL = KISTA_URL + "/api/orders/fida";
+    private static final String EXPECTED_URL = KISTA_URL + "/api/internal/fida-orders";
     private static final LocalDate TRADE_DATE = LocalDate.of(2024, 1, 15);
 
     @Mock RestTemplate restTemplate;
     KistaAdapter adapter;
 
+    static final UUID SAVED_ID = UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
+
     @BeforeEach
     void setUp() {
-        adapter = new KistaAdapter(restTemplate, KISTA_URL);
+        adapter = new KistaAdapter(restTemplate);
+        ReflectionTestUtils.setField(adapter, "baseUrl", KISTA_URL);
+        ReflectionTestUtils.setField(adapter, "internalApiToken", "test-token");
+        when(restTemplate.postForObject(eq(EXPECTED_URL), any(), eq(KistaOrderResponse.class)))
+                .thenReturn(new KistaOrderResponse(SAVED_ID));
     }
 
     private TradingRecord recordWith(List<OrderItem> buy, List<OrderItem> sell) {
@@ -50,17 +62,25 @@ class KistaAdapterTest {
         return TradingRecord.of(post, order);
     }
 
+    @SuppressWarnings("unchecked")
     private FidaOrderRequest capturedRequest() {
-        var captor = ArgumentCaptor.forClass(FidaOrderRequest.class);
-        verify(restTemplate).postForObject(eq(EXPECTED_URL), captor.capture(), eq(Void.class));
-        return captor.getValue();
+        var captor = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate).postForObject(eq(EXPECTED_URL), captor.capture(), eq(KistaOrderResponse.class));
+        return (FidaOrderRequest) captor.getValue().getBody();
     }
 
     @Test
-    @DisplayName("항상 /api/orders/fida에 1회 POST한다")
+    @DisplayName("항상 /api/internal/fida-orders에 1회 POST한다")
     void sendOrders_posts_exactly_once_to_fida_endpoint() {
         adapter.sendOrders(recordWith(List.of(), List.of()));
         capturedRequest();
+    }
+
+    @Test
+    @DisplayName("KISTA 응답의 id를 반환한다")
+    void sendOrders_returns_saved_id_from_response() {
+        UUID result = adapter.sendOrders(recordWith(List.of(), List.of()));
+        assertThat(result).isEqualTo(SAVED_ID);
     }
 
     @Test
@@ -117,6 +137,17 @@ class KistaAdapterTest {
 
         assertThat(req.orders().get(0).quantity()).isZero();
         assertThat(req.orders().get(1).quantity()).isZero();
+    }
+
+    @Test
+    @DisplayName("qty가 \"전부\"이면 quantity=null이 된다")
+    void sendOrders_qty_jeonbu_becomes_null() {
+        var jeonbu = new OrderItem(new BigDecimal("15.00"), "전부");
+
+        adapter.sendOrders(recordWith(List.of(jeonbu), List.of()));
+        var req = capturedRequest();
+
+        assertThat(req.orders().get(0).quantity()).isNull();
     }
 
     @Test

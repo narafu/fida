@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -56,16 +57,16 @@ class PortContractTest {
     }
 
     @Test
-    @DisplayName("KistaPort는 TradingRecord를 받아 주문을 전송한다")
+    @DisplayName("KistaPort는 TradingRecord를 받아 저장된 UUID를 반환한다")
     void kistaPort_accepts_tradingRecord() throws NoSuchMethodException {
         var method = KistaPort.class.getMethod("sendOrders", TradingRecord.class);
-        assertThat(method.getReturnType()).isEqualTo(void.class);
+        assertThat(method.getReturnType()).isEqualTo(UUID.class);
     }
 
     @Test
     @DisplayName("NotifyPort는 KISTA 성공 알림 메서드를 가진다")
     void notifyPort_has_notifyKistaSuccess_method() throws NoSuchMethodException {
-        var method = NotifyPort.class.getMethod("notifyKistaSuccess", TradingRecord.class);
+        var method = NotifyPort.class.getMethod("notifyKistaSuccess", TradingRecord.class, UUID.class);
         assertThat(method.getReturnType()).isEqualTo(void.class);
     }
 

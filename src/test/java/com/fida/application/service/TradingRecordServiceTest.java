@@ -117,7 +117,7 @@ class TradingRecordServiceTest {
 
         service.process();
 
-        verify(notifyPort).notifyKistaSuccess(any(TradingRecord.class));
+        verify(notifyPort).notifyKistaSuccess(any(TradingRecord.class), any());
     }
 
     @Test
@@ -141,7 +141,7 @@ class TradingRecordServiceTest {
     void process_continues_when_kista_notification_throws() {
         when(scraperPort.scrape()).thenReturn(samplePost);
         when(ocrPort.analyze(any())).thenReturn(sampleOrder);
-        doThrow(new RuntimeException("알림 실패")).when(notifyPort).notifyKistaSuccess(any());
+        doThrow(new RuntimeException("알림 실패")).when(notifyPort).notifyKistaSuccess(any(), any());
         var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, Optional.of(kistaPort));
 
         service.process(); // 알림 실패해도 예외 전파 없이 완료

@@ -5,7 +5,7 @@ import java.math.BigDecimal;
 public record Order(
         OrderType orderType,
         OrderDirection direction,
-        int quantity,
+        Integer quantity,
         BigDecimal price
 ) {
     public enum OrderType {

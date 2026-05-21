@@ -64,6 +64,7 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 - KISTA 프로젝트: https://github.com/narafu/kista.git (별도 프로젝트, FIDA가 전송한 주문을 수신해 KIS API로 실행)
 - **KISTA 주문 전송 활성화됨** — `TradingRecordService.process()`: sheet 기록 → 매매 알림 → KISTA 전송 순서. KISTA 실패는 sheet/매매 알림에 영향 없음 (`safeNotify` 패턴)
 - **KISTA 전송 결과(성공/실패)는 별도 텔레그램 메시지로 알림** — 매매 알림과 독립된 2개의 메시지
+- **KISTA 성공 알림**: 저장된 `UUID id` 앞 8자리 포함 (`KistaPort.sendOrders()` → `UUID` 반환, `KistaOrderResponse` DTO로 역직렬화)
 
 ## Task Management
 
@@ -103,5 +104,8 @@ playwright-server/  ← Node.js 사이드카 (Java로 이식 금지)
 - 어댑터 규칙 + File Interaction Rules: `src/main/java/com/fida/adapter/CLAUDE.md`
 - 도메인 제약: `src/main/java/com/fida/domain/CLAUDE.md`
 - playwright-server 특이사항: `playwright-server/CLAUDE.md`
-- KISTA API 스펙: `POST /api/orders/fida` body `{tradeDate, ticker, currentCycleStart, currentCycleRealizedPnl, avgPrice, holdings, orders[{orderType, direction, quantity, price}]}` — OpenAPI docs: `{KISTA_URL}/api-docs`
-- KISTA ticker: `"SOXL"` 고정 (`KistaAdapter` 상수). orders 배열은 BUY 먼저 SELL 나중 순서. null price → ZERO, null/비파싱 qty → 0 fallback
+- KISTA API 스펙: `POST /api/internal/fida-orders` body `{tradeDate, ticker, currentCycleStart, currentCycleRealizedPnl, avgPrice, holdings, orders[{orderType, direction, quantity, price}]}` — OpenAPI docs: `{KISTA_URL}/api-docs`
+  - 응답: `{id(UUID), tradeDate, ticker, ...}` — `KistaOrderResponse(UUID id)`로 역직렬화 (나머지 필드는 무시)
+  - 요청 헤더: `X-Internal-Token: ${kista.internal-token}` (내부 인증)
+- KISTA ticker: `"SOXL"` 고정 (`KistaAdapter` 상수). orders 배열은 BUY 먼저 SELL 나중 순서. null price → ZERO, `"전부"` qty → null (전량 주문), null/비파싱 qty → 0 fallback
+- `Order.quantity` 타입: `Integer` (nullable) — `"전부"` 입력 시 null 전송으로 KISTA 전량 주문 처리

@@ -12,6 +12,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.util.UUID;
+
 @Component
 @ConditionalOnProperty("kista.url")
 @RequiredArgsConstructor
@@ -29,7 +31,7 @@ public class KistaAdapter implements KistaPort {
     private String internalApiToken;
 
     @Override
-    public void sendOrders(TradingRecord record) {
+    public UUID sendOrders(TradingRecord record) {
         var fidaOrderRequest = FidaOrderRequest.of(record, SYMBOL);
 
         var targetUrl = UriComponentsBuilder.fromUriString(baseUrl)
@@ -38,12 +40,10 @@ public class KistaAdapter implements KistaPort {
 
         var httpEntity = createInternalRequestEntity(fidaOrderRequest);
 
-        restTemplate.postForObject(targetUrl, httpEntity, Void.class);
+        var response = restTemplate.postForObject(targetUrl, httpEntity, KistaOrderResponse.class);
+        return response != null ? response.id() : null;
     }
 
-    /**
-     * X-Internal-Token 헤더를 포함한 HttpEntity를 생성합니다.
-     */
     private HttpEntity<FidaOrderRequest> createInternalRequestEntity(FidaOrderRequest requestBody) {
         var headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);

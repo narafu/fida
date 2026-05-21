@@ -49,7 +49,10 @@ record FidaOrderRequest(
         );
     }
 
-    private static int parseQty(String qty) {
+    private static Integer parseQty(String qty) {
+        if (Objects.equals(qty, "전부")) {
+            return null;
+        }
         if (qty == null || qty.isBlank()) {
             return 0;
         }

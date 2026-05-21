@@ -2,6 +2,8 @@ package com.fida.domain.port.out;
 
 import com.fida.domain.model.TradingRecord;
 
+import java.util.UUID;
+
 public interface KistaPort {
-    void sendOrders(TradingRecord record);
+    UUID sendOrders(TradingRecord record);
 }

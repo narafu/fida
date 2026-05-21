@@ -140,7 +140,7 @@ class TelegramAdapterTest {
     void notifyKistaSuccess_sends_success_message() {
         mockServer.expect(requestTo(API_URL))
                 .andExpect(method(HttpMethod.POST))
-                .andExpect(content().string(containsString("KISTA 전송 완료")))
+                .andExpect(content().string(containsString("KISTA 저장 완료")))
                 .andRespond(withSuccess("{\"ok\":true}", MediaType.APPLICATION_JSON));
 
         ParsedOrder order = new ParsedOrder(
@@ -148,7 +148,7 @@ class TelegramAdapterTest {
                 List.of(),
                 null, null, null, 0
         );
-        adapter.notifyKistaSuccess(recordWith(order));
+        adapter.notifyKistaSuccess(recordWith(order), java.util.UUID.randomUUID());
 
         mockServer.verify();
     }

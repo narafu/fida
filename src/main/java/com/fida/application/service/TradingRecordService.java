@@ -42,8 +42,8 @@ public class TradingRecordService implements ProcessTradingRecordUseCase {
         notify.notify(record);
         kista.ifPresent(k -> {
             try {
-                k.sendOrders(record);
-                safeNotify(() -> notify.notifyKistaSuccess(record));
+                var savedId = k.sendOrders(record);
+                safeNotify(() -> notify.notifyKistaSuccess(record, savedId));
             } catch (Exception e) {
                 log.warn("KISTA 전송 실패 (무시): {}", e.getMessage());
                 safeNotify(() -> notify.notifyKistaFailure(record, e));
