@@ -38,6 +38,10 @@ google:
     service-account-json-path: ${GOOGLE_SERVICE_ACCOUNT_JSON_PATH:/secrets/service-account.json}
     sheet-name: Fanding
 
+kista:
+  url: https://kista-api.onrender.com
+  internal-token: ${INTERNAL_API_TOKEN}
+
 telegram:
   bot-token: ${TELEGRAM_BOT_TOKEN}
   chat-id: ${TELEGRAM_CHAT_ID}
