@@ -32,16 +32,31 @@ public class KistaAdapter implements KistaPort {
 
     @Override
     public UUID sendOrders(TradingRecord record) {
-        var fidaOrderRequest = FidaOrderRequest.of(record, SYMBOL);
+        var request = FidaOrderRequest.of(record, SYMBOL);
 
         var targetUrl = UriComponentsBuilder.fromUriString(baseUrl)
                 .path(INTERNAL_ORDER_PATH)
                 .toUriString();
 
-        var httpEntity = createInternalRequestEntity(fidaOrderRequest);
+        var response = restTemplate.postForObject(targetUrl, createInternalRequestEntity(request), KistaOrderResponse.class);
+        if (response == null) {
+            throw new IllegalStateException("KISTA 응답이 null입니다");
+        }
+        validate(request, response);
+        return response.id();
+    }
 
-        var response = restTemplate.postForObject(targetUrl, httpEntity, KistaOrderResponse.class);
-        return response != null ? response.id() : null;
+    private void validate(FidaOrderRequest req, KistaOrderResponse res) {
+        if (!req.tradeDate().equals(res.tradeDate())
+                || req.holdings() != res.holdings()
+                || req.orders().size() != res.orders().size()) {
+            throw new IllegalStateException(String.format(
+                    "KISTA 응답 불일치 — tradeDate: %s→%s, holdings: %d→%d, orders: %d→%d",
+                    req.tradeDate(), res.tradeDate(),
+                    req.holdings(), res.holdings(),
+                    req.orders().size(), res.orders().size()
+            ));
+        }
     }
 
     private HttpEntity<FidaOrderRequest> createInternalRequestEntity(FidaOrderRequest requestBody) {

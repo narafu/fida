@@ -23,8 +23,10 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -42,12 +44,19 @@ class KistaAdapterTest {
     static final UUID SAVED_ID = UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
 
     @BeforeEach
+    @SuppressWarnings("unchecked")
     void setUp() {
         adapter = new KistaAdapter(restTemplate);
         ReflectionTestUtils.setField(adapter, "baseUrl", KISTA_URL);
         ReflectionTestUtils.setField(adapter, "internalApiToken", "test-token");
-        when(restTemplate.postForObject(eq(EXPECTED_URL), any(), eq(KistaOrderResponse.class)))
-                .thenReturn(new KistaOrderResponse(SAVED_ID));
+        // 요청 데이터를 그대로 에코하는 응답으로 검증 통과 (일부 테스트에서 재정의)
+        lenient().when(restTemplate.postForObject(eq(EXPECTED_URL), any(), eq(KistaOrderResponse.class)))
+                .thenAnswer(inv -> {
+                    FidaOrderRequest req = (FidaOrderRequest) ((HttpEntity<?>) inv.getArgument(1)).getBody();
+                    return new KistaOrderResponse(SAVED_ID, req.tradeDate(), req.ticker(),
+                            req.currentCycleStart(), req.currentCycleRealizedPnl(),
+                            req.avgPrice(), req.holdings(), req.orders());
+                });
     }
 
     private TradingRecord recordWith(List<OrderItem> buy, List<OrderItem> sell) {
@@ -140,9 +149,9 @@ class KistaAdapterTest {
     }
 
     @Test
-    @DisplayName("qty가 \"전부\"이면 quantity=null이 된다")
+    @DisplayName("qty가 \"ALL\"이면 quantity=null이 된다")
     void sendOrders_qty_jeonbu_becomes_null() {
-        var jeonbu = new OrderItem(new BigDecimal("15.00"), "전부");
+        var jeonbu = new OrderItem(new BigDecimal("15.00"), "ALL");
 
         adapter.sendOrders(recordWith(List.of(jeonbu), List.of()));
         var req = capturedRequest();
@@ -193,5 +202,41 @@ class KistaAdapterTest {
         adapter.sendOrders(recordWith(List.of(), List.of()));
         var req = capturedRequest();
         assertThat(req.orders()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("응답이 null이면 IllegalStateException을 던진다")
+    void sendOrders_throws_when_response_is_null() {
+        when(restTemplate.postForObject(eq(EXPECTED_URL), any(), eq(KistaOrderResponse.class)))
+                .thenReturn(null);
+
+        assertThatThrownBy(() -> adapter.sendOrders(recordWith(List.of(), List.of())))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("null");
+    }
+
+    @Test
+    @DisplayName("응답 tradeDate가 다르면 IllegalStateException을 던진다")
+    void sendOrders_throws_when_response_tradeDate_mismatches() {
+        when(restTemplate.postForObject(eq(EXPECTED_URL), any(), eq(KistaOrderResponse.class)))
+                .thenReturn(new KistaOrderResponse(SAVED_ID, TRADE_DATE.plusDays(1),
+                        "SOXL", BigDecimal.ZERO, BigDecimal.ZERO, null, 0, List.of()));
+
+        assertThatThrownBy(() -> adapter.sendOrders(recordWith(List.of(), List.of())))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("tradeDate");
+    }
+
+    @Test
+    @DisplayName("응답 orders 수가 다르면 IllegalStateException을 던진다")
+    void sendOrders_throws_when_response_orders_size_mismatches() {
+        var extraOrder = new Order(Order.OrderType.LIMIT, Order.OrderDirection.BUY, 1, BigDecimal.TEN);
+        when(restTemplate.postForObject(eq(EXPECTED_URL), any(), eq(KistaOrderResponse.class)))
+                .thenReturn(new KistaOrderResponse(SAVED_ID, TRADE_DATE,
+                        "SOXL", BigDecimal.ZERO, BigDecimal.ZERO, null, 0, List.of(extraOrder)));
+
+        assertThatThrownBy(() -> adapter.sendOrders(recordWith(List.of(), List.of())))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("orders");
     }
 }

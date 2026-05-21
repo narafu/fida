@@ -50,7 +50,7 @@ record FidaOrderRequest(
     }
 
     private static Integer parseQty(String qty) {
-        if (Objects.equals(qty, "전부")) {
+        if (Objects.equals(qty, "ALL")) {
             return null;
         }
         if (qty == null || qty.isBlank()) {
