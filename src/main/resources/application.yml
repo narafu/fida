@@ -29,12 +29,6 @@ server:
   port: 7070
   shutdown: graceful
 
-scraper:
-  url: ${SCRAPER_URL:http://playwright-server:3000/scrape}
-
-kista:
-  url: ${KISTA_URL:https://kista-api.onrender.com}
-
 gemini:
   api-key: ${GEMINI_API_KEY}
 
