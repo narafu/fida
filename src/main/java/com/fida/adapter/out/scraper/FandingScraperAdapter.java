@@ -3,6 +3,7 @@ package com.fida.adapter.out.scraper;
 import com.fida.domain.model.ScrapedPost;
 import com.fida.domain.port.out.ScraperPort;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
@@ -13,6 +14,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.regex.Pattern;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class FandingScraperAdapter implements ScraperPort {

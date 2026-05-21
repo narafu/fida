@@ -8,6 +8,7 @@ import com.fida.domain.model.OrderItem;
 import com.fida.domain.model.ParsedOrder;
 import com.fida.domain.port.out.OcrPort;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -22,6 +23,7 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class GeminiVisionAdapter implements OcrPort {
@@ -97,12 +99,14 @@ public class GeminiVisionAdapter implements OcrPort {
 
     private ParsedOrder parseOrderJson(String text) {
         String jsonStr = text.trim();
+        log.info(jsonStr);
         Matcher m = JSON_FENCE.matcher(jsonStr);
         if (m.find()) {
             jsonStr = m.group(1).trim();
         }
         try {
             GeminiOrderResult raw = objectMapper.readValue(jsonStr, GeminiOrderResult.class);
+            log.info(raw.toString());
             int holdings = raw.holdings() != null ? Math.max(0, raw.holdings()) : 0;
             BigDecimal avgPrice = (holdings == 0) ? null : raw.avgPrice();
             List<OrderItem> buyOrders = toOrderItems(raw.buy());

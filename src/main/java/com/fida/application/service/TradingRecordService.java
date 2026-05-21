@@ -36,6 +36,7 @@ public class TradingRecordService implements ProcessTradingRecordUseCase {
     public void process() {
         var post = scraper.scrape();
         var order = ocr.analyze(post.images());
+
         var record = TradingRecord.of(post, order);
         sheet.update(record);
         notify.notify(record);
