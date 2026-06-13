@@ -1,5 +1,6 @@
 package com.fida.adapter.in.web;
 
+import com.fida.adapter.out.scraper.ScraperException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -31,9 +32,16 @@ public class GlobalExceptionHandler {
         return detail;
     }
 
+    @ExceptionHandler(ScraperException.class)
+    public ProblemDetail handleScraper(ScraperException ex) {
+        log.warn("ScraperException: {}", ex.getMessage(), ex);
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+        detail.setTitle("Scraper Unavailable");
+        return detail;
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ProblemDetail handleIllegalArgument(IllegalArgumentException ex) {
-        log.warn("IllegalArgumentException: class={}, message={}", ex.getClass().getName(), ex.getMessage(), ex);
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
         detail.setTitle("Invalid Request");
         return detail;

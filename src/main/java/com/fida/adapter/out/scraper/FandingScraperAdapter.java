@@ -49,7 +49,8 @@ public class FandingScraperAdapter implements ScraperPort {
         ScrapeResponse response;
         try {
             response = restTemplate.getForObject(endpoint, ScrapeResponse.class);
-        } catch (RestClientException e) {
+        } catch (Exception e) {
+            // UnresolvedAddressException(IllegalArgumentException 서브클래스)도 포함
             throw new ScraperException("playwright-server URL 스크래핑 실패: " + e.getMessage(), e);
         }
         validate(response, "URL 스크래핑 실패");
