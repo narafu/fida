@@ -26,7 +26,7 @@ springdoc:
     operations-sorter: method
 
 server:
-  port: 7070
+  port: ${PORT:7070}
   shutdown: graceful
 
 fanding:
