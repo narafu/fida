@@ -43,8 +43,19 @@ public class TradingRecordService implements ProcessTradingRecordUseCase, Proces
 
     @Override
     public void process(List<byte[]> images, LocalDate tradeDate) {
-        // 이미지 직접 제공 시 합성 ScrapedPost 생성
-        processPost(new ScrapedPost("수동 분석", tradeDate, "-", images));
+        // 이미지 직접 제공 시 OCR → KISTA 전송만 수행 (sheet/notify 생략)
+        var post = new ScrapedPost("수동 분석", tradeDate, "-", images);
+        var order = ocr.analyze(post.images());
+        var record = TradingRecord.of(post, order);
+        kista.ifPresent(k -> {
+            try {
+                var savedId = k.sendOrders(record);
+                safeNotify(() -> notify.notifyKistaSuccess(record, savedId));
+            } catch (Exception e) {
+                log.warn("KISTA 전송 실패 (무시): {}", e.getMessage());
+                safeNotify(() -> notify.notifyKistaFailure(record, e));
+            }
+        });
     }
 
     // OCR → Sheet → Telegram → Kista 공통 파이프라인

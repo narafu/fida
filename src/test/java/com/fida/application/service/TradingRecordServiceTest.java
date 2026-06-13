@@ -166,8 +166,24 @@ class TradingRecordServiceTest {
     }
 
     @Test
-    @DisplayName("process(images, date)는 scraper를 호출하지 않고 이미지를 직접 OCR 분석한다")
-    void processImages_uses_provided_images_without_scraper() {
+    @DisplayName("process(images, date)는 scraper/sheet/notify를 호출하지 않고 KISTA만 전송한다")
+    void processImages_only_calls_kista_skipping_sheet_and_notify() {
+        var images = List.of(new byte[]{1, 2, 3});
+        var date = LocalDate.of(2026, 6, 13);
+        when(ocrPort.analyze(images)).thenReturn(sampleOrder);
+        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, Optional.of(kistaPort));
+
+        service.process(images, date);
+
+        verifyNoInteractions(scraperPort);
+        verifyNoInteractions(sheetPort);
+        verify(ocrPort).analyze(images);
+        verify(kistaPort).sendOrders(any(TradingRecord.class));
+    }
+
+    @Test
+    @DisplayName("process(images, date)는 KISTA 없을 때 OCR만 수행하고 종료한다")
+    void processImages_skips_kista_when_absent() {
         var images = List.of(new byte[]{1, 2, 3});
         var date = LocalDate.of(2026, 6, 13);
         when(ocrPort.analyze(images)).thenReturn(sampleOrder);
@@ -175,23 +191,22 @@ class TradingRecordServiceTest {
 
         service.process(images, date);
 
-        verifyNoInteractions(scraperPort);
+        verifyNoInteractions(scraperPort, sheetPort);
         verify(ocrPort).analyze(images);
-        verify(sheetPort).update(any(TradingRecord.class));
-        verify(notifyPort).notify(any(TradingRecord.class));
+        verify(notifyPort, never()).notify(any());
     }
 
     @Test
-    @DisplayName("process(images, date)가 전달한 TradingRecord는 제공된 날짜와 수동 분석 제목을 가진다")
+    @DisplayName("process(images, date)가 KISTA에 전달하는 TradingRecord는 제공된 날짜와 수동 분석 제목을 가진다")
     void processImages_tradingRecord_has_provided_date_and_manual_title() {
         var date = LocalDate.of(2026, 6, 13);
         when(ocrPort.analyze(any())).thenReturn(sampleOrder);
-        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, Optional.empty());
+        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, Optional.of(kistaPort));
 
         service.process(List.of(new byte[]{1}), date);
 
         var captor = ArgumentCaptor.forClass(TradingRecord.class);
-        verify(sheetPort).update(captor.capture());
+        verify(kistaPort).sendOrders(captor.capture());
         assertThat(captor.getValue().date()).isEqualTo(date);
         assertThat(captor.getValue().postTitle()).isEqualTo("수동 분석");
     }
