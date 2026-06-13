@@ -9,7 +9,7 @@
  */
 
 const http = require('http');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const path = require('path');
 
 const PORT = process.env.PORT || 3000;
@@ -19,7 +19,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/scrape') {
     console.log(`[${new Date().toISOString()}] /scrape 요청 수신`);
     try {
-      const result = execSync(`node ${SCRIPT}`, {
+      const result = execFileSync('node', [SCRIPT], {
         env: { ...process.env },
         maxBuffer: 100 * 1024 * 1024,
         timeout: 120000,
@@ -30,6 +30,30 @@ const server = http.createServer((req, res) => {
     } catch (e) {
       const errJson = JSON.stringify({ success: false, error: e.message });
       console.error(`[${new Date().toISOString()}] /scrape 오류:`, e.message);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(errJson);
+    }
+  } else if (req.method === 'GET' && req.url.startsWith('/scrape-url')) {
+    // 특정 fanding 상세 페이지 URL을 직접 지정해 스크래핑
+    const targetUrl = new URL(req.url, 'http://localhost').searchParams.get('url');
+    if (!targetUrl) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'url 파라미터 필요' }));
+      return;
+    }
+    console.log(`[${new Date().toISOString()}] /scrape-url 요청 수신: ${targetUrl}`);
+    try {
+      const result = execFileSync('node', [SCRIPT], {
+        env: { ...process.env, TARGET_URL: targetUrl },
+        maxBuffer: 100 * 1024 * 1024,
+        timeout: 120000,
+      }).toString();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(result);
+      console.log(`[${new Date().toISOString()}] /scrape-url 완료`);
+    } catch (e) {
+      const errJson = JSON.stringify({ success: false, error: e.message });
+      console.error(`[${new Date().toISOString()}] /scrape-url 오류:`, e.message);
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(errJson);
     }

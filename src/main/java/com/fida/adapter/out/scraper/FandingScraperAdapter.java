@@ -9,6 +9,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.util.Base64;
@@ -33,10 +35,32 @@ public class FandingScraperAdapter implements ScraperPort {
         } catch (RestClientException e) {
             throw new ScraperException("playwright-server 호출 실패: " + e.getMessage(), e);
         }
+        validate(response, "스크래핑 실패");
+        return toScrapedPost(response);
+    }
+
+    @Override
+    public ScrapedPost scrapeFromUrl(String url) {
+        // scraperUrl = http://playwright-server:3000/scrape → /scrape-url?url=...
+        String endpoint = scraperUrl + "-url?url=" + URLEncoder.encode(url, StandardCharsets.UTF_8);
+        ScrapeResponse response;
+        try {
+            response = restTemplate.getForObject(endpoint, ScrapeResponse.class);
+        } catch (RestClientException e) {
+            throw new ScraperException("playwright-server URL 스크래핑 실패: " + e.getMessage(), e);
+        }
+        validate(response, "URL 스크래핑 실패");
+        return toScrapedPost(response);
+    }
+
+    private void validate(ScrapeResponse response, String contextMsg) {
         if (response == null || !response.success()) {
             String error = response != null ? response.error() : "null 응답";
-            throw new ScraperException("스크래핑 실패: " + error);
+            throw new ScraperException(contextMsg + ": " + error);
         }
+    }
+
+    private ScrapedPost toScrapedPost(ScrapeResponse response) {
         List<byte[]> images = response.images().stream()
                 .map(img -> Base64.getDecoder().decode(img.base64()))
                 .toList();
@@ -47,12 +71,7 @@ public class FandingScraperAdapter implements ScraperPort {
         if (postDate == null) {
             postDate = LocalDate.now();
         }
-        return new ScrapedPost(
-                response.postTitle(),
-                postDate,
-                response.postUrl(),
-                images
-        );
+        return new ScrapedPost(response.postTitle(), postDate, response.postUrl(), images);
     }
 
     private static final Pattern TITLE_DATE_PATTERN = Pattern.compile("(\\d{1,2})/(\\d{1,2})");

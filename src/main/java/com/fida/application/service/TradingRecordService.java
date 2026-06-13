@@ -1,7 +1,10 @@
 package com.fida.application.service;
 
+import com.fida.domain.model.ScrapedPost;
 import com.fida.domain.model.TradingRecord;
+import com.fida.domain.port.in.ProcessImagesUseCase;
 import com.fida.domain.port.in.ProcessTradingRecordUseCase;
+import com.fida.domain.port.in.ProcessUrlUseCase;
 import com.fida.domain.port.out.KistaPort;
 import com.fida.domain.port.out.NotifyPort;
 import com.fida.domain.port.out.OcrPort;
@@ -11,11 +14,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 @Slf4j
 @Service
-public class TradingRecordService implements ProcessTradingRecordUseCase {
+public class TradingRecordService implements ProcessTradingRecordUseCase, ProcessImagesUseCase, ProcessUrlUseCase {
 
     private final ScraperPort scraper;
     private final OcrPort ocr;
@@ -34,7 +39,22 @@ public class TradingRecordService implements ProcessTradingRecordUseCase {
 
     @Override
     public void process() {
-        var post = scraper.scrape();
+        processPost(scraper.scrape());
+    }
+
+    @Override
+    public void process(List<byte[]> images, LocalDate tradeDate) {
+        // 이미지 직접 제공 시 합성 ScrapedPost 생성
+        processPost(new ScrapedPost("수동 분석", tradeDate, "-", images));
+    }
+
+    @Override
+    public void process(String postUrl) {
+        processPost(scraper.scrapeFromUrl(postUrl));
+    }
+
+    // OCR → Sheet → Telegram → Kista 공통 파이프라인
+    private void processPost(ScrapedPost post) {
         var order = ocr.analyze(post.images());
 
         var record = TradingRecord.of(post, order);

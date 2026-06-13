@@ -17,6 +17,7 @@ const puppeteer = require('puppeteer');
 
 const EMAIL = process.env.FANDING_EMAIL;
 const PASSWORD = process.env.FANDING_PASSWORD;
+const TARGET_URL = process.env.TARGET_URL; // 지정 시 series 순회 스킵하고 해당 URL로 직접 이동
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 if (!EMAIL || !PASSWORD) {
@@ -48,38 +49,46 @@ if (!EMAIL || !PASSWORD) {
       throw new Error('로그인 실패: 자격증명을 확인하세요.');
     }
 
-    // ── STEP 2: Privacy 시리즈 직접 접근 + 스크롤로 전체 로드 ────────
-    await page.goto('https://fanding.kr/@laofus/series/1933/', { waitUntil: 'networkidle2' });
-    await sleep(1000);
+    // ── STEP 2-3: 최신글 URL 결정 ────────────────────────────────────
+    let latestPostUrl;
+    if (TARGET_URL) {
+      // TARGET_URL이 지정된 경우 series 순회 스킵하고 해당 URL 직접 사용
+      console.error(`[INFO] TARGET_URL 모드: ${TARGET_URL}`);
+      latestPostUrl = TARGET_URL;
+    } else {
+      // Privacy 시리즈 접근 + 스크롤로 전체 로드
+      await page.goto('https://fanding.kr/@laofus/series/1933/', { waitUntil: 'networkidle2' });
+      await sleep(1000);
 
-    // 무한스크롤: 새 링크가 더 이상 늘지 않을 때까지 스크롤
-    let prevCount = 0;
-    for (let i = 0; i < 30; i++) {
-      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await sleep(700);
-      const count = await page.evaluate(() =>
-        new Set(Array.from(document.querySelectorAll('a[href*="/@laofus/post/"]')).map(a => a.href)).size
-      );
-      if (count === prevCount) break;
-      prevCount = count;
-    }
+      // 무한스크롤: 새 링크가 더 이상 늘지 않을 때까지 스크롤
+      let prevCount = 0;
+      for (let i = 0; i < 30; i++) {
+        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+        await sleep(700);
+        const count = await page.evaluate(() =>
+          new Set(Array.from(document.querySelectorAll('a[href*="/@laofus/post/"]')).map(a => a.href)).size
+        );
+        if (count === prevCount) break;
+        prevCount = count;
+      }
 
-    // ── STEP 3: 최신글 URL 추출 (가장 높은 post ID = 최신) ──────────
-    const latestPostUrl = await page.evaluate(() => {
-      const links = [...new Set(
-        Array.from(document.querySelectorAll('a[href*="/@laofus/post/"]')).map(a => a.href)
-      )];
-      // post ID 숫자 기준 내림차순 정렬 → 첫 번째가 최신
-      links.sort((a, b) => {
-        const idA = parseInt(a.match(/\/post\/(\d+)/)?.[1] || '0');
-        const idB = parseInt(b.match(/\/post\/(\d+)/)?.[1] || '0');
-        return idB - idA;
+      // 최신글 URL 추출 (가장 높은 post ID = 최신)
+      latestPostUrl = await page.evaluate(() => {
+        const links = [...new Set(
+          Array.from(document.querySelectorAll('a[href*="/@laofus/post/"]')).map(a => a.href)
+        )];
+        // post ID 숫자 기준 내림차순 정렬 → 첫 번째가 최신
+        links.sort((a, b) => {
+          const idA = parseInt(a.match(/\/post\/(\d+)/)?.[1] || '0');
+          const idB = parseInt(b.match(/\/post\/(\d+)/)?.[1] || '0');
+          return idB - idA;
+        });
+        return links[0] || null;
       });
-      return links[0] || null;
-    });
 
-    if (!latestPostUrl) {
-      throw new Error('라오어 Privacy 최신 게시글을 찾을 수 없습니다.');
+      if (!latestPostUrl) {
+        throw new Error('라오어 Privacy 최신 게시글을 찾을 수 없습니다.');
+      }
     }
 
     // ── STEP 4: 게시글 접속 → 이미지 URL 수집 ─────────────────────

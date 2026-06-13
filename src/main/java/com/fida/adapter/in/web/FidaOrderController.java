@@ -1,15 +1,28 @@
 package com.fida.adapter.in.web;
 
+import com.fida.adapter.in.web.dto.FromUrlRequest;
+import com.fida.domain.port.in.ProcessImagesUseCase;
 import com.fida.domain.port.in.ProcessTradingRecordUseCase;
+import com.fida.domain.port.in.ProcessUrlUseCase;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.time.LocalDate;
+import java.util.List;
 
 @Tag(name = "FIDA 주문", description = "매매 기록 처리 트리거")
 @RestController
@@ -18,6 +31,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class FidaOrderController {
 
     private final ProcessTradingRecordUseCase useCase;
+    private final ProcessImagesUseCase processImages;
+    private final ProcessUrlUseCase processUrl;
 
     // 스크래핑 → OCR → 시트 기록 → 텔레그램 알림 → KISTA 주문 전송 파이프라인 트리거
     @Operation(
@@ -29,5 +44,41 @@ public class FidaOrderController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void trigger() {
         useCase.process();
+    }
+
+    // 이미지 직접 업로드 → OCR → 시트 기록 → 텔레그램 알림 → KISTA 주문 전송
+    @Operation(
+            summary = "이미지 직접 업로드 트리거",
+            description = "분석할 이미지를 multipart로 업로드. date 미지정 시 오늘 날짜 사용"
+    )
+    @ApiResponse(responseCode = "204", description = "파이프라인 처리 완료 (응답 바디 없음)")
+    @PostMapping(value = "/orders/from-image", consumes = "multipart/form-data")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void triggerFromImage(
+            @RequestPart("images") List<MultipartFile> images,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        LocalDate tradeDate = date != null ? date : LocalDate.now();
+        List<byte[]> imageBytes = images.stream().map(f -> readBytes(f)).toList();
+        processImages.process(imageBytes, tradeDate);
+    }
+
+    // fanding 상세 페이지 URL → 이미지 스크래핑 → OCR → 시트 기록 → 텔레그램 알림 → KISTA 주문 전송
+    @Operation(
+            summary = "fanding URL 기반 트리거",
+            description = "fanding 상세 페이지 URL을 전달하면 로그인 후 이미지를 추출해 파이프라인 실행"
+    )
+    @ApiResponse(responseCode = "204", description = "파이프라인 처리 완료 (응답 바디 없음)")
+    @PostMapping("/orders/from-url")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void triggerFromUrl(@RequestBody @Valid FromUrlRequest request) {
+        processUrl.process(request.postUrl());
+    }
+
+    private static byte[] readBytes(MultipartFile file) {
+        try {
+            return file.getBytes();
+        } catch (IOException e) {
+            throw new IllegalStateException("이미지 파일 읽기 실패: " + file.getOriginalFilename(), e);
+        }
     }
 }
