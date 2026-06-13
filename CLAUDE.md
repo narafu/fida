@@ -142,7 +142,7 @@ playwright-server/    ← Node.js 사이드카 (Java로 이식 금지)
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | 텔레그램 알림 |
 | `INTERNAL_API_TOKEN` | KISTA 내부 인증 토큰 (`X-Internal-Token` 헤더) |
 | `SCRAPER_URL` | 기본값 `http://playwright-server:3000/scrape` — 로컬/Docker Compose 설정 불필요. Render 배포 시 playwright-server URL로 대시보드에서 수동 설정 |
-| `KISTA_URL` | `application.yml` 기본값 `https://kista-api.onrender.com` — 변경 시에만 설정 |
+| `KISTA_URL` | `application.yml` 기본값 `https://kista-api.fly.dev` — 변경 시에만 설정 |
 | `PORT` | Render가 자동 설정 (기본 fallback 7070) — 직접 설정 불필요 |
 
 ## Design Reference

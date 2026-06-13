@@ -43,7 +43,7 @@ google:
     sheet-name: Fanding
 
 kista:
-  url: https://kista-api.onrender.com
+  url: ${KISTA_URL:https://kista-api.fly.dev}
   internal-token: ${INTERNAL_API_TOKEN}
 
 telegram:
