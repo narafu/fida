@@ -41,6 +41,20 @@ const server = http.createServer((req, res) => {
       res.end(JSON.stringify({ success: false, error: 'url 파라미터 필요' }));
       return;
     }
+    // SSRF 방지: fanding.kr의 https URL만 허용
+    try {
+      const u = new URL(targetUrl);
+      const host = u.hostname.toLowerCase().replace(/\.$/, '');
+      if (u.protocol !== 'https:' || host !== 'fanding.kr') {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'host not allowed: fanding.kr only' }));
+        return;
+      }
+    } catch (_) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'invalid url format' }));
+      return;
+    }
     console.log(`[${new Date().toISOString()}] /scrape-url 요청 수신: ${targetUrl}`);
     try {
       const result = execFileSync('node', [SCRIPT], {

@@ -9,6 +9,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.DateTimeException;
@@ -41,6 +43,7 @@ public class FandingScraperAdapter implements ScraperPort {
 
     @Override
     public ScrapedPost scrapeFromUrl(String url) {
+        requireFandingKrUrl(url);
         // scraperUrl = http://playwright-server:3000/scrape → /scrape-url?url=...
         String endpoint = scraperUrl + "-url?url=" + URLEncoder.encode(url, StandardCharsets.UTF_8);
         ScrapeResponse response;
@@ -72,6 +75,22 @@ public class FandingScraperAdapter implements ScraperPort {
             postDate = LocalDate.now();
         }
         return new ScrapedPost(response.postTitle(), postDate, response.postUrl(), images);
+    }
+
+    // SSRF 방지: fanding.kr의 https URL만 허용
+    private static void requireFandingKrUrl(String url) {
+        try {
+            URI uri = new URI(url);
+            String host = uri.getHost();
+            boolean valid = "https".equalsIgnoreCase(uri.getScheme())
+                    && host != null
+                    && host.toLowerCase().replaceAll("\\.$", "").equals("fanding.kr");
+            if (!valid) {
+                throw new IllegalArgumentException("허용되지 않은 URL (fanding.kr https만 허용): " + url);
+            }
+        } catch (URISyntaxException e) {
+            throw new IllegalArgumentException("잘못된 URL 형식: " + url, e);
+        }
     }
 
     private static final Pattern TITLE_DATE_PATTERN = Pattern.compile("(\\d{1,2})/(\\d{1,2})");
