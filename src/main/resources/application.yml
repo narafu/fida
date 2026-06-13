@@ -29,6 +29,10 @@ server:
   port: 7070
   shutdown: graceful
 
+fanding:
+  scraper:
+    url: ${SCRAPER_URL:http://playwright-server:3000/scrape}
+
 gemini:
   api-key: ${GEMINI_API_KEY}
 

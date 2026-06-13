@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: playwright-server
+    env: docker
+    dockerfilePath: ./playwright-server/Dockerfile
+    dockerContext: ./playwright-server
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: FANDING_EMAIL
+        sync: false
+      - key: FANDING_PASSWORD
+        sync: false
+
+  - type: web
+    name: fida
+    env: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GOOGLE_SHEETS_SPREADSHEET_ID
+        sync: false
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON_PATH
+        value: /secrets/service-account.json
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: INTERNAL_API_TOKEN
+        sync: false
+      - key: SCRAPER_URL
+        sync: false

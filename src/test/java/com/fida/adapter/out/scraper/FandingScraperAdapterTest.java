@@ -6,6 +6,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.MediaType;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestTemplate;
 
@@ -32,6 +33,7 @@ class FandingScraperAdapterTest {
         restTemplate = new RestTemplateBuilder().build();
         mockServer = MockRestServiceServer.createServer(restTemplate);
         adapter = new FandingScraperAdapter(restTemplate);
+        ReflectionTestUtils.setField(adapter, "scraperUrl", SCRAPER_URL);
     }
 
     @Test

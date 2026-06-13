@@ -4,6 +4,7 @@ import com.fida.domain.model.ScrapedPost;
 import com.fida.domain.port.out.ScraperPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
@@ -19,7 +20,8 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class FandingScraperAdapter implements ScraperPort {
 
-    private static final String SCRAPER_URL = "http://playwright-server:3000/scrape";
+    @Value("${fanding.scraper.url}")
+    private String scraperUrl;
 
     private final RestTemplate restTemplate;
 
@@ -27,7 +29,7 @@ public class FandingScraperAdapter implements ScraperPort {
     public ScrapedPost scrape() {
         ScrapeResponse response;
         try {
-            response = restTemplate.getForObject(SCRAPER_URL, ScrapeResponse.class);
+            response = restTemplate.getForObject(scraperUrl, ScrapeResponse.class);
         } catch (RestClientException e) {
             throw new ScraperException("playwright-server 호출 실패: " + e.getMessage(), e);
         }
