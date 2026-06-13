@@ -15,3 +15,9 @@
 ## Lazy Bean 패턴
 
 외부 파일/자격증명을 읽는 `@Bean`(예: GoogleSheetsConfig): `@Bean @Lazy` + `@Component @Lazy` + 주입 지점 `@Lazy InterfacePort` 3단 설정 필수 — 하나라도 빠지면 Spring 기동 시 파일 읽기 실패.
+
+## 인바운드 웹 레이어
+
+- `FidaOrderController`: `/api/fida/orders` 3개 엔드포인트 — 모두 204 반환, 응답 바디 없음
+- `GlobalExceptionHandler`: `@RestControllerAdvice` 전역 예외 처리 — 새 예외 타입 추가 시 여기도 확인
+- `OpenApiConfig`: Swagger UI 설정 — springdoc 버전은 루트 CLAUDE.md Key Constraints 참조

@@ -12,7 +12,12 @@ node scrape-fanding.js  # 스크래퍼 직접 실행 (디버그용)
 ## API
 
 - `GET /health` — 헬스체크 (200 OK)
-- `GET /scrape` — fanding.kr 스크래핑. 응답: `{ postDate, title, imageUrl }`
+- `GET /scrape` — fanding.kr 최신 게시물 스크래핑. 응답: `{ postDate, title, imageUrl }`
+- `GET /scrape-url?url=<fanding_url>` — 특정 상세 페이지 URL 스크래핑. SSRF 방어: `fanding.kr` HTTPS URL만 허용
+
+## Environment Variables
+
+- `FANDING_EMAIL` / `FANDING_PASSWORD` — fanding.kr 로그인 (필수)
 
 ## Gotchas
 
