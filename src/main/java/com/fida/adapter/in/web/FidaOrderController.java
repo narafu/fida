@@ -1,18 +1,14 @@
 package com.fida.adapter.in.web;
 
-import com.fida.adapter.in.web.dto.FromUrlRequest;
 import com.fida.domain.port.in.ProcessImagesUseCase;
 import com.fida.domain.port.in.ProcessTradingRecordUseCase;
-import com.fida.domain.port.in.ProcessUrlUseCase;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
@@ -32,7 +28,6 @@ public class FidaOrderController {
 
     private final ProcessTradingRecordUseCase useCase;
     private final ProcessImagesUseCase processImages;
-    private final ProcessUrlUseCase processUrl;
 
     // 스크래핑 → OCR → 시트 기록 → 텔레그램 알림 → KISTA 주문 전송 파이프라인 트리거
     @Operation(
@@ -60,18 +55,6 @@ public class FidaOrderController {
         LocalDate tradeDate = date != null ? date : LocalDate.now();
         List<byte[]> imageBytes = images.stream().map(f -> readBytes(f)).toList();
         processImages.process(imageBytes, tradeDate);
-    }
-
-    // fanding 상세 페이지 URL → 이미지 스크래핑 → OCR → 시트 기록 → 텔레그램 알림 → KISTA 주문 전송
-    @Operation(
-            summary = "fanding URL 기반 트리거",
-            description = "fanding 상세 페이지 URL을 전달하면 로그인 후 이미지를 추출해 파이프라인 실행"
-    )
-    @ApiResponse(responseCode = "204", description = "파이프라인 처리 완료 (응답 바디 없음)")
-    @PostMapping("/orders/from-url")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void triggerFromUrl(@RequestBody @Valid FromUrlRequest request) {
-        processUrl.process(request.postUrl());
     }
 
     private static byte[] readBytes(MultipartFile file) {

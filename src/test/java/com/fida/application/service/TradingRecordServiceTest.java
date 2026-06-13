@@ -196,19 +196,4 @@ class TradingRecordServiceTest {
         assertThat(captor.getValue().postTitle()).isEqualTo("수동 분석");
     }
 
-    @Test
-    @DisplayName("process(postUrl)는 scrapeFromUrl을 호출해 파이프라인을 실행한다")
-    void processUrl_delegates_to_scrapeFromUrl() {
-        var postUrl = "https://fanding.kr/@laofus/post/12345";
-        when(scraperPort.scrapeFromUrl(postUrl)).thenReturn(samplePost);
-        when(ocrPort.analyze(samplePost.images())).thenReturn(sampleOrder);
-        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, Optional.empty());
-
-        service.process(postUrl);
-
-        verify(scraperPort).scrapeFromUrl(postUrl);
-        verify(scraperPort, never()).scrape();
-        verify(sheetPort).update(any(TradingRecord.class));
-        verify(notifyPort).notify(any(TradingRecord.class));
-    }
 }
