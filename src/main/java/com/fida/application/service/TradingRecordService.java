@@ -42,9 +42,9 @@ public class TradingRecordService implements ProcessTradingRecordUseCase, Proces
     }
 
     @Override
-    public void process(List<byte[]> images, LocalDate tradeDate) {
+    public void process(byte[] image, LocalDate tradeDate) {
         // 이미지 직접 제공 시 OCR → KISTA 전송만 수행 (sheet/notify 생략)
-        var post = new ScrapedPost("수동 분석", tradeDate, "-", images);
+        var post = new ScrapedPost("수동 분석", tradeDate, "-", List.of(image));
         var order = ocr.analyze(post.images());
         var record = TradingRecord.of(post, order);
         kista.ifPresent(k -> {

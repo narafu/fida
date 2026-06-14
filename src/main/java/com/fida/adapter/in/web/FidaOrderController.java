@@ -19,7 +19,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.time.LocalDate;
-import java.util.List;
 
 @Tag(name = "FIDA 주문", description = "매매 기록 처리 트리거")
 @RestController
@@ -56,12 +55,11 @@ public class FidaOrderController {
     @PostMapping(value = "/orders/from-image", consumes = "multipart/form-data")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void triggerFromImage(
-            @RequestPart("images") List<MultipartFile> images,
+            @RequestPart("image") MultipartFile image,
             @Parameter(description = "매매 날짜 (yyyy-MM-dd). 미지정 시 오늘 날짜 사용", example = "2026-06-13")
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         LocalDate tradeDate = date != null ? date : LocalDate.now();
-        List<byte[]> imageBytes = images.stream().map(f -> readBytes(f)).toList();
-        processImages.process(imageBytes, tradeDate);
+        processImages.process(readBytes(image), tradeDate);
     }
 
     private static byte[] readBytes(MultipartFile file) {
