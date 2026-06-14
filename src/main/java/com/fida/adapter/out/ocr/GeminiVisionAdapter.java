@@ -121,6 +121,7 @@ public class GeminiVisionAdapter implements OcrPort {
 
             return new ParsedOrder(buyOrders, sellOrders, raw.currentCycleStart(), raw.currentCycleRealizedPnl(), avgPrice, holdings);
         } catch (Exception e) {
+            log.error("Gemini JSON 파싱 실패 — 원문 응답:\n{}", text, e);
             throw new OcrException("Gemini JSON 파싱 실패: " + text.substring(0, Math.min(300, text.length())), e);
         }
     }
