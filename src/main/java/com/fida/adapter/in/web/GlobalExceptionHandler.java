@@ -1,5 +1,7 @@
 package com.fida.adapter.in.web;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fida.adapter.out.scraper.ScraperException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -49,21 +51,38 @@ public class GlobalExceptionHandler {
         return detail;
     }
 
-    // KISTA API가 4xx/5xx를 반환한 경우 — 응답 바디 포함해 그대로 전달
+    private static final ObjectMapper objectMapper = new ObjectMapper();
+
+    // 외부 API(KISTA·Gemini 등)가 4xx/5xx를 반환한 경우 — 응답 바디에서 메시지 추출
     @ExceptionHandler(HttpStatusCodeException.class)
-    public ProblemDetail handleKistaHttpError(HttpStatusCodeException ex) {
-        log.warn("KISTA HTTP 오류 {}: {}", ex.getStatusCode(), ex.getResponseBodyAsString());
-        ProblemDetail detail = ProblemDetail.forStatusAndDetail(ex.getStatusCode(), ex.getResponseBodyAsString());
-        detail.setTitle("KISTA Error");
+    public ProblemDetail handleExternalHttpError(HttpStatusCodeException ex) {
+        String message = extractMessage(ex.getResponseBodyAsString(), ex.getMessage());
+        log.warn("외부 API HTTP 오류 {}: {}", ex.getStatusCode(), message);
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(ex.getStatusCode(), message);
+        detail.setTitle("External API Error");
         return detail;
     }
 
-    // KISTA 연결 실패 등 네트워크 오류
+    // 외부 API 연결 실패 등 네트워크 오류
     @ExceptionHandler(RestClientException.class)
-    public ProblemDetail handleKistaNetworkError(RestClientException ex) {
-        log.warn("KISTA 네트워크 오류: {}", ex.getMessage());
+    public ProblemDetail handleExternalNetworkError(RestClientException ex) {
+        log.warn("외부 API 네트워크 오류: {}", ex.getMessage());
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
-        detail.setTitle("KISTA Unavailable");
+        detail.setTitle("External API Unavailable");
         return detail;
+    }
+
+    // JSON 응답 바디에서 메시지 필드 추출 (실패 시 fallback)
+    private String extractMessage(String body, String fallback) {
+        try {
+            JsonNode root = objectMapper.readTree(body);
+            // Gemini: { error: { message: "..." } }
+            JsonNode msg = root.path("error").path("message");
+            if (!msg.isMissingNode()) return msg.asText();
+            // KISTA ProblemDetail: { detail: "..." }
+            JsonNode detail = root.path("detail");
+            if (!detail.isMissingNode()) return detail.asText();
+        } catch (Exception ignored) {}
+        return fallback;
     }
 }
