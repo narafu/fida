@@ -53,13 +53,18 @@ public class GlobalExceptionHandler {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    // 외부 API(KISTA·Gemini 등)가 4xx/5xx를 반환한 경우 — 응답 바디에서 메시지 추출
+    // 외부 API(KISTA·Gemini 등)가 4xx/5xx를 반환한 경우 — 응답 바디 전체를 JSON으로 포함
     @ExceptionHandler(HttpStatusCodeException.class)
     public ProblemDetail handleExternalHttpError(HttpStatusCodeException ex) {
-        String message = extractMessage(ex.getResponseBodyAsString(), ex.getMessage());
-        log.warn("외부 API HTTP 오류 {}: {}", ex.getStatusCode(), message);
-        ProblemDetail detail = ProblemDetail.forStatusAndDetail(ex.getStatusCode(), message);
+        log.warn("외부 API HTTP 오류 {}: {}", ex.getStatusCode(), ex.getResponseBodyAsString());
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(ex.getStatusCode(), ex.getMessage());
         detail.setTitle("External API Error");
+        // 응답 바디가 JSON이면 파싱해서 포함, 아니면 원문 문자열로 포함
+        try {
+            detail.setProperty("externalError", objectMapper.readTree(ex.getResponseBodyAsString()));
+        } catch (Exception ignored) {
+            detail.setProperty("externalError", ex.getResponseBodyAsString());
+        }
         return detail;
     }
 
@@ -70,19 +75,5 @@ public class GlobalExceptionHandler {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
         detail.setTitle("External API Unavailable");
         return detail;
-    }
-
-    // JSON 응답 바디에서 메시지 필드 추출 (실패 시 fallback)
-    private String extractMessage(String body, String fallback) {
-        try {
-            JsonNode root = objectMapper.readTree(body);
-            // Gemini: { error: { message: "..." } }
-            JsonNode msg = root.path("error").path("message");
-            if (!msg.isMissingNode()) return msg.asText();
-            // KISTA ProblemDetail: { detail: "..." }
-            JsonNode detail = root.path("detail");
-            if (!detail.isMissingNode()) return detail.asText();
-        } catch (Exception ignored) {}
-        return fallback;
     }
 }
