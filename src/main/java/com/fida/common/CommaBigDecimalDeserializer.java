@@ -14,7 +14,16 @@ public class CommaBigDecimalDeserializer extends JsonDeserializer<BigDecimal> {
         if (value == null || value.isBlank()) {
             return null;
         }
-        // 쉼표(,)를 제거하고 순수 숫자 문자열만 추출
-        return new BigDecimal(value.replace(",", ""));
+        // 쉼표·한글 등 숫자가 아닌 문자 제거 (소수점·음수부호 유지)
+        String cleaned = value.replaceAll("[^\\d.\\-]", "");
+        if (cleaned.isEmpty() || cleaned.equals("-") || cleaned.equals(".")) {
+            return null;
+        }
+        try {
+            return new BigDecimal(cleaned);
+        } catch (NumberFormatException e) {
+            // 날짜 문자열("2026-01-06") 등 숫자로 변환 불가한 경우 null 처리
+            return null;
+        }
     }
 }

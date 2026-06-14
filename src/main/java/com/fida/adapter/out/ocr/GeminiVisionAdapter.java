@@ -51,7 +51,7 @@ public class GeminiVisionAdapter implements OcrPort {
                     "- 데이터 없거나 \"-\"이면 null\n" +
                     "- \"남은전부\"/\"전부\"/\"ALL\"은 \"ALL\"\n" +
                     "- 달러기호($)/콤마(,) 제거하고 숫자만, 소수점 유지\n" +
-                    "- current_cycle_start: 이미지에서 \"현사이클 시작 $\" 항목의 값\n" +
+                    "- current_cycle_start: 이미지에서 \"현사이클 시작 $\" 라벨 옆의 달러 금액(숫자). 날짜가 아닌 금액임. 이미지 상단 헤더의 날짜(예: 2026년 1월 6일 시작)와 혼동 금지\n" +
                     "- current_cycle_realized_pnl: 이미지에서 \"현사이클 실현수익 $\" 항목의 값. 음수일 수도 있음.\n" +
                     "- avg_price: 이미지 오른쪽 \"평단\" 라벨 옆 셀 값만 사용. 비어있거나 보유개수가 0이면 null. 종가/현재가 등 다른 가격 사용 금지\n" +
                     "- holdings: 이미지 하단 \"보유개수\" 라벨 옆 값 사용 (\"매수개수\" 사용 금지). 반드시 0 이상의 정수이며 음수가 될 수 없음. 음수로 보이면 0으로 반환";
@@ -104,12 +104,16 @@ public class GeminiVisionAdapter implements OcrPort {
         return candidate.content().parts().get(0).text();
     }
 
+    private static final Pattern KOREAN_IN_NUMBER = Pattern.compile("(:\\s*-?\\d[\\d,.]*)([가-힣]+)");
+
     private ParsedOrder parseOrderJson(String text) {
         String jsonStr = text.trim();
         Matcher m = JSON_FENCE.matcher(jsonStr);
         if (m.find()) {
             jsonStr = m.group(1).trim();
         }
+        // unquoted 숫자 뒤 한글 제거: "holdings": 7년 → "holdings": 7
+        jsonStr = KOREAN_IN_NUMBER.matcher(jsonStr).replaceAll("$1");
         try {
             GeminiOrderResult raw = objectMapper.readValue(jsonStr, GeminiOrderResult.class);
             log.info(raw.toString());
