@@ -46,20 +46,19 @@ public class FidaOrderController {
         useCase.process();
     }
 
-    // 이미지 직접 업로드 → OCR → 시트 기록 → 텔레그램 알림 → KISTA 주문 전송
+    // 이미지 직접 업로드 → OCR → KISTA 주문 전송, KISTA 저장 ID 반환
     @Operation(
             summary = "이미지 직접 업로드 트리거",
-            description = "분석할 이미지를 multipart로 업로드. date 미지정 시 오늘 날짜 사용"
+            description = "분석할 이미지를 multipart로 업로드. date 미지정 시 오늘 날짜 사용. KISTA 저장 ID를 반환한다."
     )
-    @ApiResponse(responseCode = "204", description = "파이프라인 처리 완료 (응답 바디 없음)")
+    @ApiResponse(responseCode = "200", description = "파이프라인 처리 완료, KISTA 저장 ID 포함")
     @PostMapping(value = "/orders/from-image", consumes = "multipart/form-data")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void triggerFromImage(
+    public FromImageResponse triggerFromImage(
             @RequestPart("image") MultipartFile image,
             @Parameter(description = "매매 날짜 (yyyy-MM-dd). 미지정 시 오늘 날짜 사용", example = "2026-06-13")
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         LocalDate tradeDate = date != null ? date : LocalDate.now();
-        processImages.process(readBytes(image), tradeDate);
+        return FromImageResponse.from(processImages.process(readBytes(image), tradeDate));
     }
 
     private static byte[] readBytes(MultipartFile file) {

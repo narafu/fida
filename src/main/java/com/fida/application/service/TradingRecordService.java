@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -42,20 +43,22 @@ public class TradingRecordService implements ProcessTradingRecordUseCase, Proces
     }
 
     @Override
-    public void process(byte[] image, LocalDate tradeDate) {
+    public UUID process(byte[] image, LocalDate tradeDate) {
         // 이미지 직접 제공 시 OCR → KISTA 전송만 수행 (sheet/notify 생략)
         var post = new ScrapedPost("수동 분석", tradeDate, "-", List.of(image));
         var order = ocr.analyze(post.images());
         var record = TradingRecord.of(post, order);
-        kista.ifPresent(k -> {
+        return kista.map(k -> {
             try {
                 var savedId = k.sendOrders(record);
                 safeNotify(() -> notify.notifyKistaSuccess(record, savedId));
+                return savedId;
             } catch (Exception e) {
                 log.warn("KISTA 전송 실패 (무시): {}", e.getMessage());
                 safeNotify(() -> notify.notifyKistaFailure(record, e));
+                return null;
             }
-        });
+        }).orElse(null);
     }
 
     // OCR → Sheet → Telegram → Kista 공통 파이프라인
