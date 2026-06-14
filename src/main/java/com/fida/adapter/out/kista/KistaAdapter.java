@@ -1,5 +1,6 @@
 package com.fida.adapter.out.kista;
 
+import com.fida.domain.model.KistaResult;
 import com.fida.domain.model.TradingRecord;
 import com.fida.domain.port.out.KistaPort;
 import lombok.RequiredArgsConstructor;
@@ -11,8 +12,6 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
-
-import java.util.UUID;
 
 @Component
 @ConditionalOnProperty("kista.url")
@@ -31,7 +30,7 @@ public class KistaAdapter implements KistaPort {
     private String internalApiToken;
 
     @Override
-    public UUID sendOrders(TradingRecord record) {
+    public KistaResult sendOrders(TradingRecord record) {
         var request = FidaOrderRequest.of(record, SYMBOL);
 
         var targetUrl = UriComponentsBuilder.fromUriString(baseUrl)
@@ -43,7 +42,9 @@ public class KistaAdapter implements KistaPort {
             throw new IllegalStateException("KISTA 응답이 null입니다");
         }
         validate(request, response);
-        return response.id();
+        return new KistaResult(response.id(), response.tradeDate(), response.ticker(),
+                response.currentCycleStart(), response.currentCycleRealizedPnl(),
+                response.avgPrice(), response.holdings(), response.orders());
     }
 
     private void validate(FidaOrderRequest req, KistaOrderResponse res) {

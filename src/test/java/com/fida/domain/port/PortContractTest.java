@@ -1,5 +1,6 @@
 package com.fida.domain.port;
 
+import com.fida.domain.model.KistaResult;
 import com.fida.domain.model.ParsedOrder;
 import com.fida.domain.model.ScrapedPost;
 import com.fida.domain.model.TradingRecord;
@@ -57,10 +58,10 @@ class PortContractTest {
     }
 
     @Test
-    @DisplayName("KistaPort는 TradingRecord를 받아 저장된 UUID를 반환한다")
+    @DisplayName("KistaPort는 TradingRecord를 받아 KistaResult를 반환한다")
     void kistaPort_accepts_tradingRecord() throws NoSuchMethodException {
         var method = KistaPort.class.getMethod("sendOrders", TradingRecord.class);
-        assertThat(method.getReturnType()).isEqualTo(UUID.class);
+        assertThat(method.getReturnType()).isEqualTo(KistaResult.class);
     }
 
     @Test

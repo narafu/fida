@@ -88,8 +88,8 @@ class KistaAdapterTest {
     @Test
     @DisplayName("KISTA 응답의 id를 반환한다")
     void sendOrders_returns_saved_id_from_response() {
-        UUID result = adapter.sendOrders(recordWith(List.of(), List.of()));
-        assertThat(result).isEqualTo(SAVED_ID);
+        var result = adapter.sendOrders(recordWith(List.of(), List.of()));
+        assertThat(result.id()).isEqualTo(SAVED_ID);
     }
 
     @Test

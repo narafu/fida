@@ -7,6 +7,8 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.RestClientException;
 
 import java.util.NoSuchElementException;
 
@@ -44,6 +46,24 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleIllegalArgument(IllegalArgumentException ex) {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
         detail.setTitle("Invalid Request");
+        return detail;
+    }
+
+    // KISTA API가 4xx/5xx를 반환한 경우 — 응답 바디 포함해 그대로 전달
+    @ExceptionHandler(HttpStatusCodeException.class)
+    public ProblemDetail handleKistaHttpError(HttpStatusCodeException ex) {
+        log.warn("KISTA HTTP 오류 {}: {}", ex.getStatusCode(), ex.getResponseBodyAsString());
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(ex.getStatusCode(), ex.getResponseBodyAsString());
+        detail.setTitle("KISTA Error");
+        return detail;
+    }
+
+    // KISTA 연결 실패 등 네트워크 오류
+    @ExceptionHandler(RestClientException.class)
+    public ProblemDetail handleKistaNetworkError(RestClientException ex) {
+        log.warn("KISTA 네트워크 오류: {}", ex.getMessage());
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+        detail.setTitle("KISTA Unavailable");
         return detail;
     }
 }

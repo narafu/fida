@@ -1,5 +1,6 @@
 package com.fida.application.service;
 
+import com.fida.domain.model.KistaResult;
 import com.fida.domain.model.OrderItem;
 import com.fida.domain.model.ParsedOrder;
 import com.fida.domain.model.ScrapedPost;
@@ -19,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -38,6 +40,9 @@ class TradingRecordServiceTest {
             "매매표", LocalDate.of(2024, 1, 15), "https://fanding.kr/1", List.of(new byte[]{1}));
     private final ParsedOrder sampleOrder = new ParsedOrder(
             List.of(), List.of(), null, null, null, 0);
+    private final KistaResult sampleKistaResult = new KistaResult(
+            UUID.fromString("550e8400-e29b-41d4-a716-446655440000"),
+            LocalDate.of(2024, 1, 15), "SOXL", null, null, null, 0, List.of());
 
     @Test
     @DisplayName("process()는 scrape → OCR → sheet 업데이트 → notify 순으로 실행된다")
@@ -113,6 +118,7 @@ class TradingRecordServiceTest {
     void process_notifies_kista_success_when_sendOrders_succeeds() {
         when(scraperPort.scrape()).thenReturn(samplePost);
         when(ocrPort.analyze(any())).thenReturn(sampleOrder);
+        when(kistaPort.sendOrders(any())).thenReturn(sampleKistaResult);
         var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, Optional.of(kistaPort));
 
         service.process();
@@ -141,6 +147,7 @@ class TradingRecordServiceTest {
     void process_continues_when_kista_notification_throws() {
         when(scraperPort.scrape()).thenReturn(samplePost);
         when(ocrPort.analyze(any())).thenReturn(sampleOrder);
+        when(kistaPort.sendOrders(any())).thenReturn(sampleKistaResult);
         doThrow(new RuntimeException("알림 실패")).when(notifyPort).notifyKistaSuccess(any(), any());
         var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, Optional.of(kistaPort));
 
@@ -168,32 +175,30 @@ class TradingRecordServiceTest {
     @Test
     @DisplayName("process(images, date)는 scraper/sheet/notify를 호출하지 않고 KISTA만 전송한다")
     void processImages_only_calls_kista_skipping_sheet_and_notify() {
-        var images = List.of(new byte[]{1, 2, 3});
+        var image = new byte[]{1, 2, 3};
         var date = LocalDate.of(2026, 6, 13);
-        when(ocrPort.analyze(images)).thenReturn(sampleOrder);
+        when(ocrPort.analyze(anyList())).thenReturn(sampleOrder);
+        when(kistaPort.sendOrders(any())).thenReturn(sampleKistaResult);
         var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, Optional.of(kistaPort));
 
-        service.process(images, date);
+        service.process(image, date);
 
         verifyNoInteractions(scraperPort);
         verifyNoInteractions(sheetPort);
-        verify(ocrPort).analyze(images);
+        verify(ocrPort).analyze(anyList());
         verify(kistaPort).sendOrders(any(TradingRecord.class));
     }
 
     @Test
-    @DisplayName("process(images, date)는 KISTA 없을 때 OCR만 수행하고 종료한다")
-    void processImages_skips_kista_when_absent() {
-        var images = List.of(new byte[]{1, 2, 3});
+    @DisplayName("process(images, date)는 KISTA 없을 때 IllegalStateException을 던진다")
+    void processImages_throws_when_kista_absent() {
+        var image = new byte[]{1, 2, 3};
         var date = LocalDate.of(2026, 6, 13);
-        when(ocrPort.analyze(images)).thenReturn(sampleOrder);
+        when(ocrPort.analyze(anyList())).thenReturn(sampleOrder);
         var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, Optional.empty());
 
-        service.process(images, date);
-
-        verifyNoInteractions(scraperPort, sheetPort);
-        verify(ocrPort).analyze(images);
-        verify(notifyPort, never()).notify(any());
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
+                () -> service.process(image, date));
     }
 
     @Test
@@ -201,9 +206,10 @@ class TradingRecordServiceTest {
     void processImages_tradingRecord_has_provided_date_and_manual_title() {
         var date = LocalDate.of(2026, 6, 13);
         when(ocrPort.analyze(any())).thenReturn(sampleOrder);
+        when(kistaPort.sendOrders(any())).thenReturn(sampleKistaResult);
         var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, Optional.of(kistaPort));
 
-        service.process(List.of(new byte[]{1}), date);
+        service.process(new byte[]{1}, date);
 
         var captor = ArgumentCaptor.forClass(TradingRecord.class);
         verify(kistaPort).sendOrders(captor.capture());
