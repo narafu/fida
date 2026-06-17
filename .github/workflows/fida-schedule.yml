@@ -2,7 +2,7 @@ name: FIDA 자동 실행
 
 on:
   schedule:
-    - cron: '0 22 * * 1-5'   # 화~토 07:00 KST (UTC 기준 월~금 22:00)
+    - cron: '0 21 * * 1-5'   # 화~토 06:00 KST (UTC 기준 월~금 21:00)
   workflow_dispatch:           # GitHub UI에서 수동 트리거 가능
 
 jobs:
