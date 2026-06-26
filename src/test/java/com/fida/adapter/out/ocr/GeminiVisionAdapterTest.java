@@ -2,9 +2,11 @@ package com.fida.adapter.out.ocr;
 
 import com.fida.domain.model.OrderItem;
 import com.fida.domain.model.ParsedOrder;
+import com.fida.domain.port.out.NotifyPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -15,24 +17,35 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestToUriTemplate;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 @DisplayName("GeminiVisionAdapter 테스트")
 class GeminiVisionAdapterTest {
 
     private static final String API_KEY = "test-key";
+    private static final String GEMINI_ENDPOINT =
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={key}";
 
     private RestTemplate restTemplate;
     private MockRestServiceServer mockServer;
+    private NotifyPort notifyPort;
     private GeminiVisionAdapter adapter;
 
     @BeforeEach
     void setUp() {
         restTemplate = new RestTemplate();
         mockServer = MockRestServiceServer.createServer(restTemplate);
-        adapter = new GeminiVisionAdapter(restTemplate);
+        notifyPort = mock(NotifyPort.class);
+        adapter = new GeminiVisionAdapter(restTemplate, notifyPort);
         ReflectionTestUtils.setField(adapter, "apiKey", API_KEY);
+        ReflectionTestUtils.setField(adapter, "retryDelayMs", 0L); // 테스트에서 대기 시간 제거
     }
 
     @Test
@@ -116,17 +129,64 @@ class GeminiVisionAdapterTest {
     }
 
     @Test
-    @DisplayName("Gemini 응답 텍스트가 없으면 OcrException을 던진다")
+    @DisplayName("Gemini 응답 텍스트가 없으면 OcrException을 던지고 텔레그램 알림을 보낸다")
     void analyze_throws_when_no_response_text() {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":""}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(
-                "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={key}",
-                API_KEY))
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
         assertThatThrownBy(() -> adapter.analyze(List.of(new byte[]{1})))
                 .isInstanceOf(OcrException.class);
+
+        verify(notifyPort, times(1)).notifyGeminiError(any(Exception.class));
+    }
+
+    @Test
+    @DisplayName("503 오류 시 3회 재시도 후 실패하면 텔레그램 알림을 보낸다")
+    void analyze_retries_three_times_on_503_then_notifies() {
+        for (int i = 0; i < 3; i++) {
+            mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                    .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+        }
+
+        assertThatThrownBy(() -> adapter.analyze(List.of(new byte[]{1})))
+                .isInstanceOf(OcrException.class)
+                .hasMessageContaining("503");
+
+        mockServer.verify();
+        verify(notifyPort, times(1)).notifyGeminiError(any(Exception.class));
+    }
+
+    @Test
+    @DisplayName("503 오류 후 재시도에서 성공하면 정상 결과를 반환한다")
+    void analyze_succeeds_after_503_retry() {
+        String geminiJson = """
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holdings\\":0}"}]}}]}
+                """;
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
+
+        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
+
+        assertThat(result.buyOrders()).isEmpty();
+        mockServer.verify();
+        verify(notifyPort, times(0)).notifyGeminiError(any());
+    }
+
+    @Test
+    @DisplayName("503 외 서버 오류는 재시도 없이 즉시 텔레그램 알림을 보낸다")
+    void analyze_notifies_immediately_on_non_503_error() {
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andRespond(withServerError()); // 500
+
+        assertThatThrownBy(() -> adapter.analyze(List.of(new byte[]{1})))
+                .isInstanceOf(OcrException.class);
+
+        mockServer.verify(); // 1회만 호출됨
+        verify(notifyPort, times(1)).notifyGeminiError(any(Exception.class));
     }
 }

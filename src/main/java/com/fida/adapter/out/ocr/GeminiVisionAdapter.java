@@ -6,14 +6,18 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fida.common.CommaBigDecimalDeserializer;
 import com.fida.domain.model.OrderItem;
 import com.fida.domain.model.ParsedOrder;
+import com.fida.domain.port.out.NotifyPort;
 import com.fida.domain.port.out.OcrPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
@@ -56,11 +60,16 @@ public class GeminiVisionAdapter implements OcrPort {
                     "- avg_price: 이미지 오른쪽 \"평단\" 라벨 옆 셀 값만 사용. 비어있거나 보유개수가 0이면 null. 종가/현재가 등 다른 가격 사용 금지\n" +
                     "- holdings: 이미지 하단 \"보유개수\" 라벨 옆 값 사용 (\"매수개수\" 사용 금지). 반드시 0 이상의 정수이며 음수가 될 수 없음. 음수로 보이면 0으로 반환";
 
+    private static final int MAX_RETRIES = 3;
+    // 테스트에서 ReflectionTestUtils로 0으로 설정 가능
+    long retryDelayMs = 60_000L;
+
     private static final Pattern JSON_FENCE = Pattern.compile("```(?:json)?\\s*([\\s\\S]*?)```");
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     private final RestTemplate restTemplate;
+    private final NotifyPort notifyPort;
     @Value("${gemini.api-key}")
     private String apiKey;
 
@@ -71,14 +80,54 @@ public class GeminiVisionAdapter implements OcrPort {
         headers.setContentType(MediaType.APPLICATION_JSON);
         var entity = new HttpEntity<>(requestBody, headers);
 
-        GeminiResponse response = restTemplate.postForObject(ENDPOINT, entity, GeminiResponse.class, apiKey);
-
-        String text = extractText(response);
-        if (text == null || text.isBlank()) {
-            throw new OcrException("Gemini 응답 텍스트 없음");
+        Exception lastException = null;
+        for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                GeminiResponse response = restTemplate.postForObject(ENDPOINT, entity, GeminiResponse.class, apiKey);
+                String text = extractText(response);
+                if (text == null || text.isBlank()) {
+                    OcrException e = new OcrException("Gemini 응답 텍스트 없음");
+                    notifyPort.notifyGeminiError(e);
+                    throw e;
+                }
+                return parseOrderJson(text);
+            } catch (OcrException e) {
+                // 파싱 오류는 재시도 없이 즉시 rethrow (알림은 위에서 처리)
+                throw e;
+            } catch (HttpServerErrorException e) {
+                if (e.getStatusCode() == HttpStatus.SERVICE_UNAVAILABLE) {
+                    // 503: 재시도 대상
+                    lastException = e;
+                    log.warn("Gemini API 503 오류 (시도 {}/{}), {}초 후 재시도", attempt, MAX_RETRIES, retryDelayMs / 1000);
+                    if (attempt < MAX_RETRIES) {
+                        sleepQuietly(retryDelayMs);
+                    }
+                } else {
+                    // 503 외 서버 오류: 즉시 알림 후 실패
+                    log.error("Gemini API 오류 ({})", e.getStatusCode(), e);
+                    notifyPort.notifyGeminiError(e);
+                    throw new OcrException("Gemini API 오류: " + e.getStatusCode(), e);
+                }
+            } catch (RestClientException e) {
+                // 네트워크 등 통신 오류: 즉시 알림 후 실패
+                log.error("Gemini API 통신 오류", e);
+                notifyPort.notifyGeminiError(e);
+                throw new OcrException("Gemini API 통신 오류", e);
+            }
         }
 
-        return parseOrderJson(text);
+        // 3회 재시도 모두 실패
+        log.error("Gemini API 503 오류 {}회 재시도 후 최종 실패", MAX_RETRIES, lastException);
+        notifyPort.notifyGeminiError(lastException);
+        throw new OcrException("Gemini API 503 오류 " + MAX_RETRIES + "회 재시도 후 실패", lastException);
+    }
+
+    private void sleepQuietly(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private Object buildRequest(List<byte[]> images) {

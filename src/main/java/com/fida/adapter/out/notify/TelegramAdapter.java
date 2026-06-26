@@ -44,6 +44,12 @@ public class TelegramAdapter implements NotifyPort {
         sendText("❌ KISTA 전송 실패\n📅 " + record.date() + "\n사유: " + reason);
     }
 
+    @Override
+    public void notifyGeminiError(Exception cause) {
+        String reason = (cause.getMessage() != null) ? cause.getMessage() : "알 수 없는 오류";
+        sendText("❌ Gemini API 오류\n사유: " + reason);
+    }
+
     private void sendText(String message) {
         String url = "https://api.telegram.org/bot" + botToken + "/sendMessage";
         Map<String, String> body = Map.of("chat_id", chatId, "text", message);
