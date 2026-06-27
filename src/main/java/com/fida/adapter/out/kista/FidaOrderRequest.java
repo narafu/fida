@@ -32,7 +32,7 @@ record FidaOrderRequest(
         return new FidaOrderRequest(
                 record.date(),
                 ticker,
-                Objects.requireNonNullElse(parsedOrder.currentCycleStart(), BigDecimal.ZERO),
+                requirePositive(parsedOrder.currentCycleStart(), "currentCycleStart"),
                 Objects.requireNonNullElse(parsedOrder.currentCycleRealizedPnl(), BigDecimal.ZERO),
                 parsedOrder.avgPrice(),
                 parsedOrder.holdings(),
@@ -47,6 +47,13 @@ record FidaOrderRequest(
                 parseQty(item.qty()),
                 Objects.requireNonNullElse(item.price(), BigDecimal.ZERO)
         );
+    }
+
+    private static BigDecimal requirePositive(BigDecimal value, String field) {
+        if (value == null || value.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("KISTA 전송 불가: " + field + " 값이 없거나 0 이하입니다 — Gemini OCR 파싱 결과 확인 필요 (value=" + value + ")");
+        }
+        return value;
     }
 
     private static Integer parseQty(String qty) {

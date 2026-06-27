@@ -59,8 +59,10 @@ class KistaAdapterTest {
                 });
     }
 
+    private static final BigDecimal DEFAULT_CYCLE_START = new BigDecimal("1000");
+
     private TradingRecord recordWith(List<OrderItem> buy, List<OrderItem> sell) {
-        return recordWith(buy, sell, null, null, null, 0);
+        return recordWith(buy, sell, DEFAULT_CYCLE_START, null, null, 0);
     }
 
     private TradingRecord recordWith(List<OrderItem> buy, List<OrderItem> sell,
@@ -171,12 +173,18 @@ class KistaAdapterTest {
     }
 
     @Test
-    @DisplayName("currentCycleStart와 currentCycleRealizedPnl이 null이면 ZERO로 fallback된다")
-    void sendOrders_null_cycle_values_fall_back_to_zero() {
-        adapter.sendOrders(recordWith(List.of(), List.of(), null, null, null, 0));
-        var req = capturedRequest();
+    @DisplayName("currentCycleStart가 null이면 IllegalArgumentException을 던진다")
+    void sendOrders_throws_when_current_cycle_start_is_null() {
+        assertThatThrownBy(() -> adapter.sendOrders(recordWith(List.of(), List.of(), null, null, null, 0)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("currentCycleStart");
+    }
 
-        assertThat(req.currentCycleStart()).isEqualByComparingTo(BigDecimal.ZERO);
+    @Test
+    @DisplayName("currentCycleRealizedPnl이 null이면 ZERO로 fallback된다")
+    void sendOrders_null_realized_pnl_falls_back_to_zero() {
+        adapter.sendOrders(recordWith(List.of(), List.of(), DEFAULT_CYCLE_START, null, null, 0));
+        var req = capturedRequest();
         assertThat(req.currentCycleRealizedPnl()).isEqualByComparingTo(BigDecimal.ZERO);
     }
 
