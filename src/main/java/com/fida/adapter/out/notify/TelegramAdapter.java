@@ -74,7 +74,7 @@ public class TelegramAdapter implements NotifyPort {
     private String formatLines(List<OrderItem> items) {
         List<OrderItem> valid = items.stream()
                 .filter(i -> i.price() != null)
-                .collect(Collectors.toList());
+                .toList();
         if (valid.isEmpty()) return "  없음";
         return IntStream.range(0, valid.size())
                 .mapToObj(i -> "  " + (i + 1) + ". $" +

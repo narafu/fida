@@ -11,7 +11,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.util.UriComponentsBuilder;
 
 @Component
 @ConditionalOnProperty("kista.url")
@@ -33,9 +32,7 @@ public class KistaAdapter implements KistaPort {
     public KistaResult sendOrders(TradingRecord record) {
         var request = FidaOrderRequest.of(record, SYMBOL);
 
-        var targetUrl = UriComponentsBuilder.fromUriString(baseUrl)
-                .path(INTERNAL_ORDER_PATH)
-                .toUriString();
+        var targetUrl = baseUrl + INTERNAL_ORDER_PATH;
 
         var response = restTemplate.postForObject(targetUrl, createInternalRequestEntity(request), KistaOrderResponse.class);
         if (response == null) {

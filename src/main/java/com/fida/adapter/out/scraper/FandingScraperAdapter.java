@@ -33,14 +33,14 @@ public class FandingScraperAdapter implements ScraperPort {
         } catch (RestClientException e) {
             throw new ScraperException("playwright-server 호출 실패: " + e.getMessage(), e);
         }
-        validate(response, "스크래핑 실패");
+        validate(response);
         return toScrapedPost(response);
     }
 
-    private void validate(ScrapeResponse response, String contextMsg) {
+    private void validate(ScrapeResponse response) {
         if (response == null || !response.success()) {
             String error = response != null ? response.error() : "null 응답";
-            throw new ScraperException(contextMsg + ": " + error);
+            throw new ScraperException("스크래핑 실패: " + error);
         }
     }
 
