@@ -178,6 +178,25 @@ class GeminiVisionAdapterTest {
     }
 
     @Test
+    @DisplayName("sell 앞 행이 모두 null이고 마지막 행에만 값이 있어도 sell을 파싱한다")
+    void analyze_parses_sell_when_only_last_row_has_data() {
+        // 오늘 실제 발생 케이스: Gemini가 sell=[] 반환 → 이 테스트는 Java 필터 로직 검증
+        String geminiJson = """
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":233.84,\\"qty\\":4},{\\"price\\":234.46,\\"qty\\":4}],\\"sell\\":[{\\"price\\":null,\\"qty\\":null},{\\"price\\":null,\\"qty\\":null},{\\"price\\":236.54,\\"qty\\":\\"ALL\\"}],\\"current_cycle_start\\":13977.43,\\"current_cycle_realized_pnl\\":200.68,\\"avg_price\\":225.746,\\"holdings\\":4}"}]}}]}
+                """;
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
+
+        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
+
+        assertThat(result.buyOrders()).hasSize(2);
+        assertThat(result.sellOrders()).hasSize(1);
+        assertThat(result.sellOrders().get(0).price()).isEqualByComparingTo(new BigDecimal("236.54"));
+        assertThat(result.sellOrders().get(0).qty()).isEqualTo("ALL");
+        mockServer.verify();
+    }
+
+    @Test
     @DisplayName("503 외 서버 오류는 재시도 없이 즉시 텔레그램 알림을 보낸다")
     void analyze_notifies_immediately_on_non_503_error() {
         mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))

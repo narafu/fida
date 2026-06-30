@@ -50,7 +50,8 @@ public class GeminiVisionAdapter implements OcrPort {
                     "- 첫 번째 블록 헤더가 \"매수가\"이면 → buy 배열에 입력 (최대 3행)\n" +
                     "- 두 번째 블록 헤더가 \"매도가\"이면 → sell 배열에 입력 (최대 3행)\n" +
                     "- 각 섹션 내 행의 가격이나 수량이 \"-\"이면 해당 항목은 null\n" +
-                    "- 섹션 내 빈 행(가격·수량 모두 null/\"-\")은 건너뛰고, 값이 있는 행은 행 위치(첫째·둘째·셋째)에 관계없이 모두 포함\n\n" +
+                    "- 섹션 내 빈 행(가격·수량 모두 \"-\")은 건너뜀. 값이 있는 행은 위치(첫째·둘째·셋째)에 무관하게 반드시 포함\n" +
+                    "  예: 매도가 섹션이 [-/-, -/-, 236.54/남은전부]이면 → sell: [{\"price\": 236.54, \"qty\": \"ALL\"}]\n\n" +
                     "[값 추출 규칙]\n" +
                     "- buy/sell 최대 3건\n" +
                     "- 데이터 없거나 \"-\"이면 null\n" +
@@ -172,6 +173,10 @@ public class GeminiVisionAdapter implements OcrPort {
             BigDecimal avgPrice = (holdings == 0) ? null : raw.avgPrice();
             List<OrderItem> buyOrders = toOrderItems(raw.buy());
             List<OrderItem> sellOrders = toOrderItems(raw.sell());
+            // sell이 비어있으면 Gemini가 매도 주문을 누락했을 가능성 — 로그로 원인 추적
+            if (sellOrders.isEmpty()) {
+                log.warn("Gemini sell 파싱 결과 비어있음 — 원시 sell 데이터: {}", raw.sell());
+            }
 
             return new ParsedOrder(buyOrders, sellOrders, raw.currentCycleStart(), raw.currentCycleRealizedPnl(), avgPrice, holdings);
         } catch (Exception e) {
