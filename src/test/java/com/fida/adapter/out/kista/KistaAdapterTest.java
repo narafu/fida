@@ -109,7 +109,7 @@ class KistaAdapterTest {
         var buy = new OrderItem(new BigDecimal("10.50"), "3");
         var sell = new OrderItem(new BigDecimal("20.00"), "5");
 
-        adapter.sendOrders(recordWith(List.of(buy), List.of(sell)));
+        adapter.sendOrders(recordWith(List.of(buy), List.of(sell), DEFAULT_CYCLE_START, null, new BigDecimal("15.00"), 5));
         var req = capturedRequest();
 
         assertThat(req.orders()).hasSize(2);
@@ -128,7 +128,7 @@ class KistaAdapterTest {
         var buy2 = new OrderItem(new BigDecimal("11.00"), "2");
         var sell = new OrderItem(new BigDecimal("12.00"), "3");
 
-        adapter.sendOrders(recordWith(List.of(buy1, buy2), List.of(sell)));
+        adapter.sendOrders(recordWith(List.of(buy1, buy2), List.of(sell), DEFAULT_CYCLE_START, null, new BigDecimal("11.50"), 3));
         var req = capturedRequest();
 
         assertThat(req.orders()).hasSize(3);
@@ -178,6 +178,17 @@ class KistaAdapterTest {
         assertThatThrownBy(() -> adapter.sendOrders(recordWith(List.of(), List.of(), null, null, null, 0)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("currentCycleStart");
+    }
+
+    @Test
+    @DisplayName("holdings가 0인데 SELL 주문이 있으면 KISTA 전송 전에 IllegalArgumentException을 던진다")
+    void sendOrders_throws_when_sell_exists_without_holdings() {
+        var sell = new OrderItem(new BigDecimal("39.73"), "ALL");
+
+        assertThatThrownBy(() -> adapter.sendOrders(recordWith(List.of(), List.of(sell), DEFAULT_CYCLE_START, null, new BigDecimal("35.564"), 0)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("holdings")
+                .hasMessageContaining("SELL");
     }
 
     @Test

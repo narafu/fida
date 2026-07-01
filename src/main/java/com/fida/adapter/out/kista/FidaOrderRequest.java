@@ -29,6 +29,9 @@ record FidaOrderRequest(
                 parsedOrder.sellOrders().stream().map(item -> toOrder(item, Order.OrderDirection.SELL))
         ).toList();
 
+        // OCR 파싱 결과가 모순되면 외부 API까지 보내지 않고 즉시 차단한다.
+        validateOrders(parsedOrder.holdings(), orders);
+
         return new FidaOrderRequest(
                 record.date(),
                 ticker,
@@ -54,6 +57,13 @@ record FidaOrderRequest(
             throw new IllegalArgumentException("KISTA 전송 불가: " + field + " 값이 없거나 0 이하입니다 — Gemini OCR 파싱 결과 확인 필요 (value=" + value + ")");
         }
         return value;
+    }
+
+    private static void validateOrders(int holdings, List<Order> orders) {
+        boolean hasSellOrder = orders.stream().anyMatch(order -> order.direction() == Order.OrderDirection.SELL);
+        if (holdings == 0 && hasSellOrder) {
+            throw new IllegalArgumentException("KISTA 전송 불가: holdings=0 인데 SELL 주문이 존재합니다 — Gemini OCR 파싱 결과 확인 필요");
+        }
     }
 
     private static Integer parseQty(String qty) {

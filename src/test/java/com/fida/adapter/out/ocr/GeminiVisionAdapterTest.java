@@ -129,6 +129,17 @@ class GeminiVisionAdapterTest {
     }
 
     @Test
+    @DisplayName("holdings 프롬프트는 누적개수를 보유 수량 후보로 안내한다")
+    void prompt_includes_cumulative_holdings_guidance() throws Exception {
+        var promptField = GeminiVisionAdapter.class.getDeclaredField("PROMPT");
+        promptField.setAccessible(true);
+
+        String prompt = (String) promptField.get(null);
+
+        assertThat(prompt).contains("누적개수");
+    }
+
+    @Test
     @DisplayName("Gemini 응답 텍스트가 없으면 OcrException을 던지고 텔레그램 알림을 보낸다")
     void analyze_throws_when_no_response_text() {
         String geminiJson = """
