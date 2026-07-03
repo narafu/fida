@@ -208,6 +208,23 @@ class GeminiVisionAdapterTest {
     }
 
     @Test
+    @DisplayName("holdings가 0이어도 cumulative_qty가 있으면 이를 우선 사용한다")
+    void analyze_prefers_cumulative_qty_when_holdings_is_zero() {
+        String geminiJson = """
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":39.39,\\"qty\\":27},{\\"price\\":39.15,\\"qty\\":28}],\\"sell\\":[{\\"price\\":39.73,\\"qty\\":\\"ALL\\"}],\\"current_cycle_start\\":14063.31,\\"current_cycle_realized_pnl\\":289.54,\\"avg_price\\":35.564,\\"holdings\\":0,\\"cumulative_qty\\":27,\\"buy_qty\\":-57}"}]}}]}
+                """;
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
+
+        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
+
+        assertThat(result.sellOrders()).hasSize(1);
+        assertThat(result.holdings()).isEqualTo(27);
+        assertThat(result.avgPrice()).isEqualByComparingTo(new BigDecimal("35.564"));
+        mockServer.verify();
+    }
+
+    @Test
     @DisplayName("503 외 서버 오류는 재시도 없이 즉시 텔레그램 알림을 보낸다")
     void analyze_notifies_immediately_on_non_503_error() {
         mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
