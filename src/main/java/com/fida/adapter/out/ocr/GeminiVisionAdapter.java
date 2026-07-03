@@ -64,9 +64,9 @@ public class GeminiVisionAdapter implements OcrPort {
                     "- current_cycle_realized_pnl: 이미지에서 \"현사이클 실현수익 $\" 항목의 값. 음수일 수도 있음.\n" +
                     "- avg_price: 이미지 오른쪽 \"평단\" 라벨 옆 셀 값만 사용. 비어있거나 보유개수가 0이면 null. 종가/현재가 등 다른 가격 사용 금지\n" +
                     "- holding_qty: \"보유개수\" 라벨 값만 기록. 없으면 null\n" +
-                    "- cumulative_qty: \"누적개수\" 라벨 값만 기록. 없으면 null\n" +
-                    "- buy_qty: \"매수개수\" 라벨 값만 기록. 없으면 null\n" +
-                    "- holdings: 최종 보유 수량. \"보유개수\"가 있으면 그 값, 없으면 \"누적개수\" 값 사용. \"매수개수\" 사용 금지. 반드시 0 이상의 정수이며 음수가 될 수 없음. 음수로 보이면 0으로 반환";
+                    "- cumulative_qty: 이미지 하단 왼쪽 표에서 \"누적개수\" 라벨 행의 값(양수 정수). 오른쪽 \"N 배수 예시\" 섹션에도 누적개수가 표시되는 경우가 있으나 그 섹션은 무시. 없으면 null\n" +
+                    "- buy_qty: 이미지 하단 왼쪽 표에서 \"매수개수\" 라벨 행의 값. 음수일 수 있음. 없으면 null\n" +
+                    "- holdings: 최종 보유 수량. \"보유개수\"가 있으면 그 값, 없으면 하단 왼쪽 표의 \"누적개수\" 값 사용. \"매수개수\" 사용 금지(매수개수는 음수일 수 있어 혼동 주의). 반드시 0 이상의 정수";
 
     private static final int MAX_RETRIES = 3;
     // 테스트에서 ReflectionTestUtils로 0으로 설정 가능
@@ -182,6 +182,10 @@ public class GeminiVisionAdapter implements OcrPort {
             // sell이 비어있으면 Gemini가 매도 주문을 누락했을 가능성 — 로그로 원인 추적
             if (sellOrders.isEmpty()) {
                 log.warn("Gemini sell 파싱 결과 비어있음 — 원시 sell 데이터: {}", raw.sell());
+            }
+            // holdings=0 & sell 존재 시 OCR 오파싱 가능성 — 원문 로그로 추적
+            if (holdings == 0 && !sellOrders.isEmpty()) {
+                log.warn("holdings=0 인데 SELL 주문 존재 — 원문 Gemini 응답:\n{}", text);
             }
 
             return new ParsedOrder(buyOrders, sellOrders, raw.currentCycleStart(), raw.currentCycleRealizedPnl(), avgPrice, holdings);
