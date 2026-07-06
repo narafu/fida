@@ -30,7 +30,19 @@ if (!EMAIL || !PASSWORD) {
   try {
     browser = await puppeteer.launch({
       headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-software-rasterizer',
+        '--disable-background-networking',
+        '--disable-breakpad',
+        '--disable-crash-reporter',
+        '--no-zygote',
+        '--single-process',
+      ],
     });
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 800 });

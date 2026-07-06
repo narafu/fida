@@ -40,19 +40,19 @@ public class TelegramAdapter implements NotifyPort {
 
     @Override
     public void notifyKistaFailure(TradingRecord record, Exception cause) {
-        String reason = (cause.getMessage() != null) ? cause.getMessage() : "알 수 없는 오류";
+        String reason = summarizeReason(cause);
         sendText("❌ KISTA 전송 실패\n📅 " + record.date() + "\n사유: " + reason);
     }
 
     @Override
     public void notifyGeminiError(Exception cause) {
-        String reason = (cause.getMessage() != null) ? cause.getMessage() : "알 수 없는 오류";
+        String reason = summarizeReason(cause);
         sendText("❌ Gemini API 오류\n사유: " + reason);
     }
 
     @Override
     public void notifyApplicationFailure(String stage, Exception cause) {
-        String reason = (cause.getMessage() != null) ? cause.getMessage() : "알 수 없는 오류";
+        String reason = summarizeReason(cause);
         sendText("❌ FIDA 실행 실패\n단계: " + stage + "\n사유: " + reason);
     }
 
@@ -101,5 +101,25 @@ public class TelegramAdapter implements NotifyPort {
     private String fmtQty(String qty) {
         if ("ALL".equals(qty)) return "전부";
         return qty != null ? qty : "-";
+    }
+
+    private String summarizeReason(Exception cause) {
+        String message = (cause != null && cause.getMessage() != null) ? cause.getMessage() : "알 수 없는 오류";
+        if (message.contains("Failed to launch the browser process")) {
+            return "브라우저 실행 실패 (Chromium/Puppeteer)";
+        }
+        if (message.contains("Too Many Requests") || message.contains("RESOURCE_EXHAUSTED") || message.contains("quota")) {
+            return "Gemini 일일한도 초과";
+        }
+        if (message.contains("로그인 실패")) {
+            return "Fanding 로그인 실패";
+        }
+        if (message.contains("이미지를 찾을 수 없습니다")) {
+            return "Fanding 게시글 이미지 없음";
+        }
+        if (message.contains("playwright-server 호출 실패")) {
+            return "Fanding 스크래퍼 실패";
+        }
+        return message.length() > 180 ? message.substring(0, 180) + "..." : message;
     }
 }

@@ -198,6 +198,21 @@ class TelegramAdapterTest {
     }
 
     @Test
+    @DisplayName("notifyApplicationFailure는 긴 playwright 오류를 핵심 사유로 축약한다")
+    void notifyApplicationFailure_summarizes_long_playwright_error() {
+        mockServer.expect(requestTo(API_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("FIDA 실행 실패")))
+                .andExpect(content().string(containsString("브라우저 실행 실패")))
+                .andRespond(withSuccess("{\"ok\":true}", MediaType.APPLICATION_JSON));
+
+        adapter.notifyApplicationFailure("FIDA one-shot",
+                new RuntimeException("playwright-server 호출 실패: 500 INTERNAL_SERVER_ERROR body={\"stdout\":\"{\\\"success\\\":false,\\\"error\\\":\\\"Failed to launch the browser process!\\\\n[57:84:ERROR:dbus]...\\\"}\"}"));
+
+        mockServer.verify();
+    }
+
+    @Test
     @DisplayName("notifyGeminiQuota는 남은 일일한도를 (잔여/전체) 형식으로 전송한다")
     void notifyGeminiQuota_sends_remaining_daily_limit() {
         mockServer.expect(requestTo(API_URL))
