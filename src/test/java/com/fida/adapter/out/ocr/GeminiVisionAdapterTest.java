@@ -13,6 +13,7 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
+import java.nio.file.Path;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,7 +44,9 @@ class GeminiVisionAdapterTest {
         restTemplate = new RestTemplate();
         mockServer = MockRestServiceServer.createServer(restTemplate);
         notifyPort = mock(NotifyPort.class);
-        adapter = new GeminiVisionAdapter(restTemplate, notifyPort);
+        adapter = new GeminiVisionAdapter(restTemplate, notifyPort,
+                new GeminiQuotaTracker(Path.of(System.getProperty("java.io.tmpdir"),
+                        "fida-gemini-quota-test-" + System.nanoTime() + ".json"), 20, java.time.LocalDate::now));
         ReflectionTestUtils.setField(adapter, "apiKey", API_KEY);
         ReflectionTestUtils.setField(adapter, "retryDelayMs", 0L); // 테스트에서 대기 시간 제거
     }

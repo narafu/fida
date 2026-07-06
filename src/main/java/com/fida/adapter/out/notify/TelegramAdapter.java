@@ -50,6 +50,17 @@ public class TelegramAdapter implements NotifyPort {
         sendText("❌ Gemini API 오류\n사유: " + reason);
     }
 
+    @Override
+    public void notifyApplicationFailure(String stage, Exception cause) {
+        String reason = (cause.getMessage() != null) ? cause.getMessage() : "알 수 없는 오류";
+        sendText("❌ FIDA 실행 실패\n단계: " + stage + "\n사유: " + reason);
+    }
+
+    @Override
+    public void notifyGeminiQuota(int remaining, int limit) {
+        sendText("ℹ️ Gemini 일일한도\n잔여: (" + remaining + "/" + limit + ")");
+    }
+
     private void sendText(String message) {
         String url = "https://api.telegram.org/bot" + botToken + "/sendMessage";
         Map<String, String> body = Map.of("chat_id", chatId, "text", message);

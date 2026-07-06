@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
@@ -30,6 +31,9 @@ public class FandingScraperAdapter implements ScraperPort {
         ScrapeResponse response;
         try {
             response = restTemplate.getForObject(scraperUrl, ScrapeResponse.class);
+        } catch (HttpStatusCodeException e) {
+            throw new ScraperException("playwright-server 호출 실패: " + e.getStatusCode()
+                    + " body=" + e.getResponseBodyAsString(), e);
         } catch (RestClientException e) {
             throw new ScraperException("playwright-server 호출 실패: " + e.getMessage(), e);
         }

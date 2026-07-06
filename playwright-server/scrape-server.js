@@ -28,8 +28,9 @@ const server = http.createServer((req, res) => {
       res.end(result);
       console.log(`[${new Date().toISOString()}] /scrape 완료`);
     } catch (e) {
-      const errJson = JSON.stringify({ success: false, error: e.message });
-      console.error(`[${new Date().toISOString()}] /scrape 오류:`, e.message);
+      const details = buildChildError(e);
+      const errJson = JSON.stringify({ success: false, ...details });
+      console.error(`[${new Date().toISOString()}] /scrape 오류:`, JSON.stringify(details));
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(errJson);
     }
@@ -66,8 +67,9 @@ const server = http.createServer((req, res) => {
       res.end(result);
       console.log(`[${new Date().toISOString()}] /scrape-url 완료`);
     } catch (e) {
-      const errJson = JSON.stringify({ success: false, error: e.message });
-      console.error(`[${new Date().toISOString()}] /scrape-url 오류:`, e.message);
+      const details = buildChildError(e);
+      const errJson = JSON.stringify({ success: false, ...details });
+      console.error(`[${new Date().toISOString()}] /scrape-url 오류:`, JSON.stringify(details));
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(errJson);
     }
@@ -84,3 +86,19 @@ server.listen(PORT, () => {
   console.log(`Scrape server 시작: http://localhost:${PORT}`);
   console.log(`n8n에서 호출 URL: http://host.docker.internal:${PORT}/scrape`);
 });
+
+function buildChildError(error) {
+  return {
+    error: error.message,
+    status: error.status ?? null,
+    signal: error.signal ?? null,
+    stdout: tail(error.stdout),
+    stderr: tail(error.stderr),
+  };
+}
+
+function tail(value) {
+  if (!value) return '';
+  const text = Buffer.isBuffer(value) ? value.toString('utf8') : String(value);
+  return text.slice(-4000);
+}

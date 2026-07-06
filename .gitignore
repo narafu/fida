@@ -33,6 +33,7 @@ build/test-results/
 
 # Docker override
 docker-compose.override.yml
+.fida-state/
 
 # Fly.io
 .fly/

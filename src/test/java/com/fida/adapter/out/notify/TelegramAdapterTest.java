@@ -181,4 +181,33 @@ class TelegramAdapterTest {
 
         mockServer.verify();
     }
+
+    @Test
+    @DisplayName("notifyApplicationFailure는 단계명과 사유를 Telegram API에 전송한다")
+    void notifyApplicationFailure_sends_stage_and_reason() {
+        mockServer.expect(requestTo(API_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("FIDA 실행 실패")))
+                .andExpect(content().string(containsString("스크래핑")))
+                .andExpect(content().string(containsString("로그인 실패")))
+                .andRespond(withSuccess("{\"ok\":true}", MediaType.APPLICATION_JSON));
+
+        adapter.notifyApplicationFailure("스크래핑", new RuntimeException("로그인 실패"));
+
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("notifyGeminiQuota는 남은 일일한도를 (잔여/전체) 형식으로 전송한다")
+    void notifyGeminiQuota_sends_remaining_daily_limit() {
+        mockServer.expect(requestTo(API_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("Gemini 일일한도")))
+                .andExpect(content().string(containsString("(19/20)")))
+                .andRespond(withSuccess("{\"ok\":true}", MediaType.APPLICATION_JSON));
+
+        adapter.notifyGeminiQuota(19, 20);
+
+        mockServer.verify();
+    }
 }

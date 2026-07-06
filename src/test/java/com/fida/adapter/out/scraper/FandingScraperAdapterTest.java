@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -16,6 +17,7 @@ import java.util.Base64;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 
@@ -87,6 +89,23 @@ class FandingScraperAdapterTest {
 
         assertThatThrownBy(() -> adapter.scrape())
                 .isInstanceOf(ScraperException.class);
+    }
+
+    @Test
+    @DisplayName("HTTP 500 응답 본문은 ScraperException 메시지에 포함된다")
+    void scrape_includes_server_error_body_in_exception_message() {
+        String body = """
+                {"success":false,"error":"Command failed","stdout":"{\\"success\\":false,\\"error\\":\\"로그인 실패\\"}","stderr":"trace"}
+                """;
+        mockServer.expect(requestTo(SCRAPER_URL))
+                .andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(body));
+
+        assertThatThrownBy(() -> adapter.scrape())
+                .isInstanceOf(ScraperException.class)
+                .hasMessageContaining("로그인 실패")
+                .hasMessageContaining("stderr");
     }
 
     @Test

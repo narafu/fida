@@ -79,6 +79,7 @@ public class GeminiVisionAdapter implements OcrPort {
 
     private final RestTemplate restTemplate;
     private final NotifyPort notifyPort;
+    private final GeminiQuotaTracker quotaTracker;
     @Value("${gemini.api-key}")
     private String apiKey;
 
@@ -93,10 +94,11 @@ public class GeminiVisionAdapter implements OcrPort {
         for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
                 GeminiResponse response = restTemplate.postForObject(ENDPOINT, entity, GeminiResponse.class, apiKey);
+                notifyGeminiQuota();
                 String text = extractText(response);
                 if (text == null || text.isBlank()) {
                     OcrException e = new OcrException("Gemini 응답 텍스트 없음");
-                    notifyPort.notifyGeminiError(e);
+                    safeNotifyGeminiError(e);
                     throw e;
                 }
                 return parseOrderJson(text);
@@ -104,6 +106,7 @@ public class GeminiVisionAdapter implements OcrPort {
                 // 파싱 오류는 재시도 없이 즉시 rethrow (알림은 위에서 처리)
                 throw e;
             } catch (HttpServerErrorException e) {
+                notifyGeminiQuota();
                 if (e.getStatusCode() == HttpStatus.SERVICE_UNAVAILABLE) {
                     // 503: 재시도 대상
                     lastException = e;
@@ -114,21 +117,39 @@ public class GeminiVisionAdapter implements OcrPort {
                 } else {
                     // 503 외 서버 오류: 즉시 알림 후 실패
                     log.error("Gemini API 오류 ({})", e.getStatusCode(), e);
-                    notifyPort.notifyGeminiError(e);
+                    safeNotifyGeminiError(e);
                     throw new OcrException("Gemini API 오류: " + e.getStatusCode(), e);
                 }
             } catch (RestClientException e) {
+                notifyGeminiQuota();
                 // 네트워크 등 통신 오류: 즉시 알림 후 실패
                 log.error("Gemini API 통신 오류", e);
-                notifyPort.notifyGeminiError(e);
+                safeNotifyGeminiError(e);
                 throw new OcrException("Gemini API 통신 오류", e);
             }
         }
 
         // 3회 재시도 모두 실패
         log.error("Gemini API 503 오류 {}회 재시도 후 최종 실패", MAX_RETRIES, lastException);
-        notifyPort.notifyGeminiError(lastException);
+        safeNotifyGeminiError(lastException);
         throw new OcrException("Gemini API 503 오류 " + MAX_RETRIES + "회 재시도 후 실패", lastException);
+    }
+
+    private void notifyGeminiQuota() {
+        try {
+            GeminiQuotaTracker.QuotaStatus status = quotaTracker.recordRequest();
+            notifyPort.notifyGeminiQuota(status.remaining(), status.limit());
+        } catch (Exception e) {
+            log.warn("Gemini 일일한도 알림 실패: {}", e.getMessage());
+        }
+    }
+
+    private void safeNotifyGeminiError(Exception cause) {
+        try {
+            notifyPort.notifyGeminiError(cause);
+        } catch (Exception e) {
+            log.warn("Gemini 오류 알림 실패: {}", e.getMessage());
+        }
     }
 
     private void sleepQuietly(long millis) {

@@ -79,6 +79,20 @@ class PortContractTest {
     }
 
     @Test
+    @DisplayName("NotifyPort는 전체 실행 실패 알림 메서드를 가진다")
+    void notifyPort_has_notifyApplicationFailure_method() throws NoSuchMethodException {
+        var method = NotifyPort.class.getMethod("notifyApplicationFailure", String.class, Exception.class);
+        assertThat(method.getReturnType()).isEqualTo(void.class);
+    }
+
+    @Test
+    @DisplayName("NotifyPort는 Gemini 일일한도 알림 메서드를 가진다")
+    void notifyPort_has_notifyGeminiQuota_method() throws NoSuchMethodException {
+        var method = NotifyPort.class.getMethod("notifyGeminiQuota", int.class, int.class);
+        assertThat(method.getReturnType()).isEqualTo(void.class);
+    }
+
+    @Test
     @DisplayName("모든 Port 인터페이스는 domain 패키지에 위치한다")
     void all_ports_reside_in_domain_package() {
         assertThat(ProcessTradingRecordUseCase.class.getPackageName())
