@@ -1,13 +1,14 @@
 FROM node:20-slim
 
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-
+# Install system libraries that Chrome for Testing depends on
 RUN apt-get update && apt-get install -y \
     chromium \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+# PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false: puppeteer downloads its own Chrome for Testing
+# Do NOT set PUPPETEER_EXECUTABLE_PATH — use puppeteer bundled Chrome, not system Debian chromium
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false
 
 WORKDIR /app
 
