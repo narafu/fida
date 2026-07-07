@@ -39,9 +39,8 @@ if (!EMAIL || !PASSWORD) {
         '--disable-software-rasterizer',
         '--disable-background-networking',
         '--disable-breakpad',
+        '--disable-crashpad',
         '--disable-crash-reporter',
-        '--no-zygote',
-        '--single-process',
       ],
     });
     const page = await browser.newPage();
