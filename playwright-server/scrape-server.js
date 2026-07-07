@@ -17,6 +17,7 @@ const SCRIPT = path.join(__dirname, 'scrape-fanding.js');
 
 const server = http.createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/scrape') {
+    const start = Date.now();
     console.log(`[${new Date().toISOString()}] /scrape 요청 수신`);
     try {
       const result = execFileSync('node', [SCRIPT], {
@@ -24,13 +25,15 @@ const server = http.createServer((req, res) => {
         maxBuffer: 100 * 1024 * 1024,
         timeout: 120000,
       }).toString();
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(result);
-      console.log(`[${new Date().toISOString()}] /scrape 완료`);
+      console.log(`[${new Date().toISOString()}] /scrape 완료 (${elapsed}s)`);
     } catch (e) {
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
       const details = buildChildError(e);
       const errJson = JSON.stringify({ success: false, ...details });
-      console.error(`[${new Date().toISOString()}] /scrape 오류:`, JSON.stringify(details));
+      console.error(`[${new Date().toISOString()}] /scrape 실패 (${elapsed}s):`, JSON.stringify(details));
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(errJson);
     }
@@ -56,6 +59,7 @@ const server = http.createServer((req, res) => {
       res.end(JSON.stringify({ success: false, error: 'invalid url format' }));
       return;
     }
+    const start = Date.now();
     console.log(`[${new Date().toISOString()}] /scrape-url 요청 수신: ${targetUrl}`);
     try {
       const result = execFileSync('node', [SCRIPT], {
@@ -63,13 +67,15 @@ const server = http.createServer((req, res) => {
         maxBuffer: 100 * 1024 * 1024,
         timeout: 120000,
       }).toString();
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(result);
-      console.log(`[${new Date().toISOString()}] /scrape-url 완료`);
+      console.log(`[${new Date().toISOString()}] /scrape-url 완료 (${elapsed}s)`);
     } catch (e) {
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
       const details = buildChildError(e);
       const errJson = JSON.stringify({ success: false, ...details });
-      console.error(`[${new Date().toISOString()}] /scrape-url 오류:`, JSON.stringify(details));
+      console.error(`[${new Date().toISOString()}] /scrape-url 실패 (${elapsed}s):`, JSON.stringify(details));
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(errJson);
     }

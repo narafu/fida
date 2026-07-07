@@ -19,6 +19,7 @@ const EMAIL = process.env.FANDING_EMAIL;
 const PASSWORD = process.env.FANDING_PASSWORD;
 const TARGET_URL = process.env.TARGET_URL; // 지정 시 series 순회 스킵하고 해당 URL로 직접 이동
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const log = (msg) => console.error(`[scraper ${new Date().toISOString()}] ${msg}`);
 
 if (!EMAIL || !PASSWORD) {
   console.log(JSON.stringify({ success: false, error: 'FANDING_EMAIL or FANDING_PASSWORD not set' }));
@@ -28,6 +29,7 @@ if (!EMAIL || !PASSWORD) {
 (async () => {
   let browser;
   try {
+    log('브라우저 시작');
     browser = await puppeteer.launch({
       headless: 'new',
       args: [
@@ -42,10 +44,12 @@ if (!EMAIL || !PASSWORD) {
         '--disable-crash-reporter',
       ],
     });
+    log('브라우저 시작 완료');
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 800 });
 
     // ── STEP 1: 로그인 ──────────────────────────────────────────────
+    log('STEP 1: 로그인 시도');
     await page.goto('https://fanding.kr', { waitUntil: 'networkidle2' });
     await page.click('button.side-nav__login');
     await page.waitForSelector('input.fd-text-input__core[type="email"]');
@@ -58,15 +62,15 @@ if (!EMAIL || !PASSWORD) {
     if (stillLoggedOut) {
       throw new Error('로그인 실패: 자격증명을 확인하세요.');
     }
+    log('STEP 1: 로그인 성공');
 
     // ── STEP 2-3: 최신글 URL 결정 ────────────────────────────────────
     let latestPostUrl;
     if (TARGET_URL) {
-      // TARGET_URL이 지정된 경우 series 순회 스킵하고 해당 URL 직접 사용
-      console.error(`[INFO] TARGET_URL 모드: ${TARGET_URL}`);
+      log(`STEP 2: TARGET_URL 모드: ${TARGET_URL}`);
       latestPostUrl = TARGET_URL;
     } else {
-      // Privacy 시리즈 접근 + 스크롤로 전체 로드
+      log('STEP 2: Privacy 시리즈 접근');
       await page.goto('https://fanding.kr/@laofus/series/1933/', { waitUntil: 'networkidle2' });
       await sleep(1000);
 
@@ -81,6 +85,7 @@ if (!EMAIL || !PASSWORD) {
         if (count === prevCount) break;
         prevCount = count;
       }
+      log(`STEP 2: 게시글 링크 ${prevCount}개 수집`);
 
       // 최신글 URL 추출 (가장 높은 post ID = 최신)
       latestPostUrl = await page.evaluate(() => {
@@ -99,9 +104,11 @@ if (!EMAIL || !PASSWORD) {
       if (!latestPostUrl) {
         throw new Error('라오어 Privacy 최신 게시글을 찾을 수 없습니다.');
       }
+      log(`STEP 3: 최신 게시글 URL: ${latestPostUrl}`);
     }
 
     // ── STEP 4: 게시글 접속 → 이미지 URL 수집 ─────────────────────
+    log('STEP 4: 게시글 접속');
     await page.goto(latestPostUrl, { waitUntil: 'networkidle2' });
     await sleep(1000);
 
@@ -123,6 +130,7 @@ if (!EMAIL || !PASSWORD) {
       }
       return new Date().toISOString().split('T')[0];
     });
+    log(`STEP 4: 제목="${postTitle}", 날짜=${postDate}`);
 
     // 본문 이미지 URL 수집 (selector: img.fd-editor-image, 부모: tiptap ProseMirror)
     const imageUrls = await page.evaluate(() => {
@@ -143,6 +151,7 @@ if (!EMAIL || !PASSWORD) {
     if (imageUrls.length === 0) {
       throw new Error('게시글 본문에서 이미지를 찾을 수 없습니다.');
     }
+    log(`STEP 4: 이미지 ${imageUrls.length}개 발견`);
 
     // ── STEP 4.5: 팝업/모달 닫기 ───────────────────────────────────
     await page.evaluate(() => {
@@ -155,6 +164,7 @@ if (!EMAIL || !PASSWORD) {
     // ── STEP 5: 이미지 요소 스크린샷 (CDN 인증 우회) ───────────────
     // page.goto로 이미지 URL 직접 접근 시 CDN이 차단하므로
     // 렌더링된 img 요소를 Puppeteer로 직접 스크린샷
+    log('STEP 5: 이미지 스크린샷 시작');
     const imgHandles = await page.$$('img.fd-editor-image');
     const images = [];
     for (const handle of imgHandles) {
@@ -165,11 +175,14 @@ if (!EMAIL || !PASSWORD) {
     if (images.length === 0) {
       throw new Error('이미지 스크린샷 실패');
     }
+    log(`STEP 5: 스크린샷 ${images.length}개 완료`);
 
     await browser.close();
+    log('완료');
 
     console.log(JSON.stringify({ success: true, postTitle, postDate, postUrl: latestPostUrl, images }));
   } catch (err) {
+    log(`실패: ${err.message}`);
     if (browser) await browser.close();
     console.log(JSON.stringify({ success: false, error: err.message }));
     process.exit(1);
