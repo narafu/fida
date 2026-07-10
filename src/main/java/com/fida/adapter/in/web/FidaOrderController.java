@@ -57,6 +57,10 @@ public class FidaOrderController {
             @RequestPart("image") MultipartFile image,
             @Parameter(description = "매매 날짜 (yyyy-MM-dd). 미지정 시 오늘 날짜 사용", example = "2026-06-13")
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        // 빈 파일은 Gemini까지 보내지 않고 즉시 거부 — Gemini의 모호한 "Unable to process input image" 400 방지
+        if (image.isEmpty()) {
+            throw new IllegalArgumentException("업로드된 이미지가 비어있습니다: " + image.getOriginalFilename());
+        }
         LocalDate tradeDate = date != null ? date : LocalDate.now();
         return FromImageResponse.from(processImages.process(readBytes(image), tradeDate));
     }
