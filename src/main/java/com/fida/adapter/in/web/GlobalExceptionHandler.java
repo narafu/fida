@@ -2,6 +2,7 @@ package com.fida.adapter.in.web;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fida.adapter.out.ocr.OcrException;
 import com.fida.adapter.out.scraper.ScraperException;
 import com.fida.domain.port.out.NotifyPort;
 import lombok.RequiredArgsConstructor;
@@ -57,6 +58,25 @@ public class GlobalExceptionHandler {
         safeNotify("HTTP invalid request", ex);
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
         detail.setTitle("Invalid Request");
+        return detail;
+    }
+
+    // KISTA 응답 불일치·null 응답 등 내부 상태 오류 — 500 + 텔레그램 알림
+    @ExceptionHandler(IllegalStateException.class)
+    public ProblemDetail handleIllegalState(IllegalStateException ex) {
+        log.error("IllegalStateException: {}", ex.getMessage(), ex);
+        safeNotify("HTTP internal state", ex);
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage());
+        detail.setTitle("Internal State Error");
+        return detail;
+    }
+
+    // OCR 실패 — GeminiVisionAdapter가 이미 notifyGeminiError로 알림 전송하므로 상태 변환만 수행
+    @ExceptionHandler(OcrException.class)
+    public ProblemDetail handleOcr(OcrException ex) {
+        log.warn("OcrException: {}", ex.getMessage());
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+        detail.setTitle("OCR Failed");
         return detail;
     }
 
