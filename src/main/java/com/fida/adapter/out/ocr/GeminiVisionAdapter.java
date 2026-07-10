@@ -87,6 +87,8 @@ public class GeminiVisionAdapter implements OcrPort {
 
     @Override
     public ParsedOrder analyze(List<byte[]> images) {
+        // Gemini 400 "Unable to process input image" 진단용 — 실제 전송 바이트 크기·헤더 확인
+        logImageDiagnostics(images);
         Object requestBody = buildRequest(images);
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -135,6 +137,19 @@ public class GeminiVisionAdapter implements OcrPort {
         log.error("Gemini API 503 오류 {}회 재시도 후 최종 실패", MAX_RETRIES, lastException);
         safeNotifyGeminiError(lastException);
         throw new OcrException("Gemini API 503 오류 " + MAX_RETRIES + "회 재시도 후 실패", lastException);
+    }
+
+    private void logImageDiagnostics(List<byte[]> images) {
+        for (int i = 0; i < images.size(); i++) {
+            byte[] img = images.get(i);
+            int headerLen = Math.min(img.length, 12);
+            StringBuilder hex = new StringBuilder();
+            for (int b = 0; b < headerLen; b++) {
+                hex.append(String.format("%02X ", img[b]));
+            }
+            log.info("Gemini 이미지 진단 [{}/{}] bytes={} header={}mime={}",
+                    i + 1, images.size(), img.length, hex, detectMimeType(img));
+        }
     }
 
     private void notifyGeminiQuota() {
