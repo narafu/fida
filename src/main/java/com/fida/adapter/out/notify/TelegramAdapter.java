@@ -57,6 +57,11 @@ public class TelegramAdapter implements NotifyPort {
     }
 
     @Override
+    public void notifyOcrWarning(String warning) {
+        sendText("⚠️ OCR 검증 경고\n" + warning);
+    }
+
+    @Override
     public void notifyGeminiQuota(int remaining, int limit) {
         sendText("ℹ️ Gemini 일일한도\n잔여: (" + remaining + "/" + limit + ")");
     }

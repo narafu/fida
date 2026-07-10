@@ -19,6 +19,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -257,6 +258,8 @@ class GeminiVisionAdapterTest {
         ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
 
         assertThat(result.currentCycleStart()).isEqualByComparingTo(new BigDecimal("10000.00"));
+        // 경고가 로그뿐 아니라 텔레그램 알림으로도 전송되는지 검증
+        verify(notifyPort).notifyOcrWarning(anyString());
     }
 
     @Test

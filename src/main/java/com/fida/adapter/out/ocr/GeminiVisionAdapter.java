@@ -169,6 +169,14 @@ public class GeminiVisionAdapter implements OcrPort {
         }
     }
 
+    private void safeNotifyOcrWarning(String warning) {
+        try {
+            notifyPort.notifyOcrWarning(warning);
+        } catch (Exception e) {
+            log.warn("OCR 경고 알림 실패: {}", e.getMessage());
+        }
+    }
+
     private void sleepQuietly(long millis) {
         try {
             Thread.sleep(millis);
@@ -247,10 +255,13 @@ public class GeminiVisionAdapter implements OcrPort {
             if (holdings == 0 && !sellOrders.isEmpty()) {
                 log.warn("holdings=0 인데 SELL 주문 존재 — 원문 Gemini 응답:\n{}", text);
             }
-            // "현사이클 시작"과 "시즌 시작원금" 행을 혼동한 운영 사례 재발 감지용 경고
+            // "현사이클 시작"과 "시즌 시작원금" 행을 혼동한 운영 사례 재발 감지 — 로그 + 텔레그램 경고
             if (raw.currentCycleStart() != null && raw.seasonStartCapital() != null
                     && raw.currentCycleStart().compareTo(raw.seasonStartCapital()) == 0) {
-                log.warn("current_cycle_start가 season_start_capital과 동일함({}) — 혼동 파싱 여부 확인 필요", raw.currentCycleStart());
+                String warning = "current_cycle_start가 season_start_capital과 동일함(" + raw.currentCycleStart()
+                        + ") — \"현사이클 시작\"/\"시즌 시작원금\" 혼동 파싱 가능성, 시트·KISTA 값 확인 필요";
+                log.warn(warning);
+                safeNotifyOcrWarning(warning);
             }
 
             return new ParsedOrder(buyOrders, sellOrders, raw.currentCycleStart(), raw.currentCycleRealizedPnl(), avgPrice, holdings);

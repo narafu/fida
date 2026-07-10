@@ -225,4 +225,17 @@ class TelegramAdapterTest {
 
         mockServer.verify();
     }
+
+    @Test
+    @DisplayName("OCR 검증 경고 메시지를 전송한다")
+    void notifyOcrWarning_sends_warning_message() {
+        mockServer.expect(requestTo(API_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("OCR 검증 경고")))
+                .andRespond(withSuccess("{\"ok\":true}", MediaType.APPLICATION_JSON));
+
+        adapter.notifyOcrWarning("current_cycle_start 혼동 의심");
+
+        mockServer.verify();
+    }
 }
