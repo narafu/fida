@@ -1,9 +1,6 @@
 gemini:
   api-key: test-api-key
 
-scraper:
-  url: http://playwright-server:3000/scrape
-
 google:
   sheets:
     spreadsheet-id: test-spreadsheet-id

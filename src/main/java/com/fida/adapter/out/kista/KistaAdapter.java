@@ -5,7 +5,6 @@ import com.fida.domain.model.TradingRecord;
 import com.fida.domain.port.out.KistaPort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -13,7 +12,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
 @Component
-@ConditionalOnProperty("kista.url")
 @RequiredArgsConstructor
 public class KistaAdapter implements KistaPort {
 
