@@ -65,13 +65,22 @@ public class FandingScraperAdapter implements ScraperPort {
     private static final Pattern TITLE_DATE_PATTERN = Pattern.compile("(\\d{1,2})/(\\d{1,2})");
 
     private LocalDate resolveDateFromTitle(String title) {
+        return resolveDateFromTitle(title, LocalDate.now());
+    }
+
+    LocalDate resolveDateFromTitle(String title, LocalDate today) {
         if (title == null) return null;
         var m = TITLE_DATE_PATTERN.matcher(title);
         if (!m.find()) return null;
         try {
-            return LocalDate.of(LocalDate.now().getYear(),
+            LocalDate candidate = LocalDate.of(today.getYear(),
                     Integer.parseInt(m.group(1)),
                     Integer.parseInt(m.group(2)));
+            // 연초에 전년도 연말 게시글을 처리하는 경우: 6개월 초과 미래 날짜는 전년도로 해석
+            if (candidate.isAfter(today.plusMonths(6))) {
+                candidate = candidate.minusYears(1);
+            }
+            return candidate;
         } catch (DateTimeException e) {
             return null;
         }

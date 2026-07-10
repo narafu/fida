@@ -175,4 +175,21 @@ class FandingScraperAdapterTest {
 
         assertThat(result.postDate()).isEqualTo(LocalDate.now());
     }
+
+    @Test
+    @DisplayName("연초에 전년도 12월 게시글 제목을 처리하면 전년도 날짜로 해석한다")
+    void resolveDateFromTitle_interprets_far_future_as_previous_year() {
+        // 2027-01-01에 "12/31" 제목 처리 → 2027-12-31이 아닌 2026-12-31
+        var result = adapter.resolveDateFromTitle("Privacy 12/31 _ SOXL 매매기록", LocalDate.of(2027, 1, 1));
+
+        assertThat(result).isEqualTo(LocalDate.of(2026, 12, 31));
+    }
+
+    @Test
+    @DisplayName("제목 날짜가 오늘로부터 6개월 이내면 올해 날짜로 해석한다")
+    void resolveDateFromTitle_keeps_current_year_for_near_dates() {
+        var result = adapter.resolveDateFromTitle("Privacy 7/11 _ SOXL 매매기록", LocalDate.of(2026, 7, 10));
+
+        assertThat(result).isEqualTo(LocalDate.of(2026, 7, 11));
+    }
 }
