@@ -22,6 +22,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.hamcrest.Matchers.containsString;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestToUriTemplate;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
@@ -225,6 +227,36 @@ class GeminiVisionAdapterTest {
         assertThat(result.holdings()).isEqualTo(27);
         assertThat(result.avgPrice()).isEqualByComparingTo(new BigDecimal("35.564"));
         mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("동일 이미지에 항상 같은 결과를 얻기 위해 temperature 0을 요청에 포함한다")
+    void request_includes_zero_temperature_for_deterministic_output() {
+        String geminiJson = """
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holdings\\":0}"}]}}]}
+                """;
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andExpect(content().string(containsString("\"temperature\":0")))
+                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
+
+        adapter.analyze(List.of(new byte[]{1}));
+
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("current_cycle_start가 season_start_capital과 같으면 혼동 가능성을 경고 로그로 남긴다")
+    void analyze_warns_when_current_cycle_start_matches_season_start_capital() {
+        // 운영 사례: "현사이클 시작 $"과 "시즌1 시작원금 $"을 혼동해 같은 값(10000.00)을 반환한 케이스 재현
+        String geminiJson = """
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":10000.00,\\"season_start_capital\\":10000.00,\\"avg_price\\":null,\\"holdings\\":0}"}]}}]}
+                """;
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
+
+        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
+
+        assertThat(result.currentCycleStart()).isEqualByComparingTo(new BigDecimal("10000.00"));
     }
 
     @Test

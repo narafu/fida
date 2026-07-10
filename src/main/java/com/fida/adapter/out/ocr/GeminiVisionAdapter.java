@@ -41,6 +41,7 @@ public class GeminiVisionAdapter implements OcrPort {
                     "  \"buy\": [{\"price\": 매수가격, \"qty\": 매수수량}],\n" +
                     "  \"sell\": [{\"price\": 매도가격, \"qty\": 매도수량}],\n" +
                     "  \"current_cycle_start\": 현사이클시작,\n" +
+                    "  \"season_start_capital\": 시즌시작원금,\n" +
                     "  \"current_cycle_realized_pnl\": 현사이클실현수익,\n" +
                     "  \"avg_price\": 평단,\n" +
                     "  \"holding_qty\": 보유개수후보,\n" +
@@ -62,6 +63,7 @@ public class GeminiVisionAdapter implements OcrPort {
                     "- \"남은전부\"/\"전부\"/\"ALL\"은 \"ALL\"\n" +
                     "- 달러기호($)/콤마(,) 제거하고 숫자만, 소수점 유지\n" +
                     "- current_cycle_start: 이미지에서 정확히 \"현사이클 시작 $\" 라벨인 행의 값만 사용. 근처에 \"XXXX 시작원금 $\"(연도+시작원금) 라벨의 행이 별도로 있으며 값이 다름 — 해당 행은 사용 금지. 날짜가 아닌 금액임.\n" +
+                    "- season_start_capital: 이미지에서 \"XXXX 시작원금 $\"(연도 또는 시즌N+시작원금) 라벨 행의 값. current_cycle_start와 혼동 검증용이므로 별도로 기록. 없으면 null\n" +
                     "- current_cycle_realized_pnl: 이미지에서 정확히 \"현사이클 실현수익 $\" 라벨 행의 값만 사용. 바로 아래 \"2026 실현수익 $\"(연간 누적)·\"연간 실현수익 $\" 등 다른 실현수익 항목은 절대 사용 금지. 음수일 수도 있음.\n" +
                     "- avg_price: 이미지 오른쪽 \"평단\" 라벨 옆 셀 값만 사용. 비어있거나 보유개수가 0이면 null. 종가/현재가 등 다른 가격 사용 금지\n" +
                     "- holding_qty: \"보유개수\" 라벨 값만 기록. 없으면 null\n" +
@@ -169,7 +171,11 @@ public class GeminiVisionAdapter implements OcrPort {
                     "data", Base64.getEncoder().encodeToString(img)
             )));
         }
-        return Map.of("contents", List.of(Map.of("parts", parts)));
+        // temperature 0: 동일 이미지 재요청 시 결과가 달라지는 비결정적 응답 방지
+        return Map.of(
+                "contents", List.of(Map.of("parts", parts)),
+                "generationConfig", Map.of("temperature", 0)
+        );
     }
 
     private String extractText(GeminiResponse response) {
@@ -208,6 +214,11 @@ public class GeminiVisionAdapter implements OcrPort {
             // holdings=0 & sell 존재 시 OCR 오파싱 가능성 — 원문 로그로 추적
             if (holdings == 0 && !sellOrders.isEmpty()) {
                 log.warn("holdings=0 인데 SELL 주문 존재 — 원문 Gemini 응답:\n{}", text);
+            }
+            // "현사이클 시작"과 "시즌 시작원금" 행을 혼동한 운영 사례 재발 감지용 경고
+            if (raw.currentCycleStart() != null && raw.seasonStartCapital() != null
+                    && raw.currentCycleStart().compareTo(raw.seasonStartCapital()) == 0) {
+                log.warn("current_cycle_start가 season_start_capital과 동일함({}) — 혼동 파싱 여부 확인 필요", raw.currentCycleStart());
             }
 
             return new ParsedOrder(buyOrders, sellOrders, raw.currentCycleStart(), raw.currentCycleRealizedPnl(), avgPrice, holdings);
@@ -265,6 +276,10 @@ public class GeminiVisionAdapter implements OcrPort {
             @com.fasterxml.jackson.annotation.JsonProperty("current_cycle_start")
             @JsonDeserialize(using = CommaBigDecimalDeserializer.class)
             BigDecimal currentCycleStart,
+
+            @com.fasterxml.jackson.annotation.JsonProperty("season_start_capital")
+            @JsonDeserialize(using = CommaBigDecimalDeserializer.class)
+            BigDecimal seasonStartCapital,
 
             @com.fasterxml.jackson.annotation.JsonProperty("current_cycle_realized_pnl")
             @JsonDeserialize(using = CommaBigDecimalDeserializer.class)
