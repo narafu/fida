@@ -45,7 +45,7 @@ bash gradlew bootJar                     # app.jar 빌드 (테스트 생략)
 bash gradlew bootRun --args='--spring.profiles.active=local'  # 로컬 실행
 # REST API 수동 트리거 (로컬 실행 중)
 curl -X POST http://localhost:7070/api/fida/orders                                                  # 전체 파이프라인
-curl -X POST http://localhost:7070/api/fida/orders/from-url -H "Content-Type: application/json" -d '{"postUrl":"https://fanding.kr/..."}'
+curl -X POST http://localhost:7070/api/fida/orders/from-image -F "image=@/path/to/screenshot.png" -F "date=2026-07-10"
 # Swagger UI: http://localhost:7070/swagger-ui.html
 docker compose up --build                # 컨테이너 빌드 및 실행
 docker compose run --rm -e SPRING_PROFILES_ACTIVE=job -e SPRING_MAIN_WEB_APPLICATION_TYPE=none fida  # GitHub Actions one-shot 로컬 테스트
@@ -103,7 +103,7 @@ playwright-server/    ← Node.js 사이드카 (Java로 이식 금지)
 
 - 소스 코드: **모든 구현 완료** (KistaAdapter, FidaOrderController 포함 12개 태스크 completed)
 - 구현 태스크는 shrimp-task-manager로 관리 중 (`list_tasks`로 확인)
-- **GitHub Actions Cron 전환 완료 및 검증 완료** — `.github/workflows/fida-schedule.yml` (UTC `0 22 * * 1-5` = KST 화~토 07:00)
+- **GitHub Actions Cron 전환 완료 및 검증 완료** — `.github/workflows/fida-schedule.yml` (UTC `0 21 * * 1-5` = KST 화~토 06:00; Render 스케줄러 07:00과 1시간 시차 이중화)
 - GitHub Secrets 등록 시 service-account.json: `base64 -i <경로>/service-account.json | tr -d '\n'` → `GOOGLE_SERVICE_ACCOUNT_JSON_B64`로 등록
 - **Render 배포 완료** — `https://fida.onrender.com` (서비스 ID: `srv-d8m9vqcm0tmc73ct17ug`), 기본 프로파일(`!job`)로 스케줄러 활성
   - Render Secret Files: 대시보드 → fida 서비스 → Secret Files → 경로 `/secrets/service-account.json`
@@ -141,6 +141,7 @@ playwright-server/    ← Node.js 사이드카 (Java로 이식 금지)
 | `GOOGLE_SERVICE_ACCOUNT_JSON_PATH` | `/secrets/service-account.json` |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | 텔레그램 알림 |
 | `INTERNAL_API_TOKEN` | KISTA 내부 인증 토큰 (`X-Internal-Token` 헤더) |
+| `GEMINI_QUOTA_USAGE_PATH` | Gemini 일일 사용량 파일 경로 (기본 `/tmp/fida-gemini-quota-usage.json`) — GH Actions는 `/state/...`로 지정해 cache로 영속화 |
 | `SCRAPER_URL` | 기본값 `http://playwright-server:3000/scrape` — 로컬/Docker Compose 설정 불필요. Render 배포 시 playwright-server URL로 대시보드에서 수동 설정 |
 | `KISTA_URL` | `application.yml` 기본값 `https://kista-api.fly.dev` — 변경 시에만 설정 |
 | `PORT` | Render가 자동 설정 (기본 fallback 7070) — 직접 설정 불필요 |

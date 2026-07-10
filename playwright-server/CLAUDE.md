@@ -12,7 +12,8 @@ node scrape-fanding.js  # 스크래퍼 직접 실행 (디버그용)
 ## API
 
 - `GET /health` — 헬스체크 (200 OK)
-- `GET /scrape` — fanding.kr 최신 게시물 스크래핑. 응답: `{ postDate, title, imageUrl }`
+- `GET /scrape` — fanding.kr 최신 게시물 스크래핑. 응답: `{ success, postTitle, postDate, postUrl, images: [{ base64, mimeType }] }` / 실패: `{ success: false, error, status, signal, stdout, stderr }`
+- 스크래핑 진행 중 새 스크래핑 요청은 503 `{ success: false, error: "scrape already in progress" }` (동시 실행 방지)
 - `GET /scrape-url?url=<fanding_url>` — 특정 상세 페이지 URL 스크래핑. SSRF 방어: `fanding.kr` HTTPS URL만 허용
 
 ## Environment Variables

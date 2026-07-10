@@ -18,6 +18,6 @@
 
 ## 인바운드 웹 레이어
 
-- `FidaOrderController`: `/api/fida/orders` 3개 엔드포인트 — 모두 204 반환, 응답 바디 없음
+- `FidaOrderController`: 2개 엔드포인트 — `POST /orders`(204, 바디 없음), `POST /orders/from-image`(200, KISTA 저장 ID 포함 `FromImageResponse` 반환)
 - `GlobalExceptionHandler`: `@RestControllerAdvice` 전역 예외 처리 — 새 예외 타입 추가 시 여기도 확인
 - `OpenApiConfig`: Swagger UI 설정 — springdoc 버전은 루트 CLAUDE.md Key Constraints 참조
