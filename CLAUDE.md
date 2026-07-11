@@ -83,6 +83,7 @@ playwright-server/    ← Node.js 사이드카 (Java로 이식 금지)
 - FIDA 서버 포트: 기본 **7070** (KISTA가 8080 사용 중). `server.port: ${PORT:7070}` — Render는 PORT 환경변수로 포트 지정(실제 10000), 로컬/Docker Compose는 기본값 7070 사용. Dockerfile `EXPOSE` 및 docker-compose.yml healthcheck URL은 7070 유지
 - DB 없음 (JPA/DataSource 추가 금지), RestTemplate 전용 (WebClient 금지)
 - Gemini 모델: `gemini-2.5-flash-lite` 고정
+- Gemini HTTP 429/`RESOURCE_EXHAUSTED`는 `OcrException("Gemini API 일일한도 초과")`로 분류 — 일반 `Gemini API 통신 오류`로 뭉개지 않음
 - 스케줄: 화~토 07:00 KST (`cron = "0 0 7 * * TUE-SAT"`, 변경 금지)
 - Google Sheets 셀 범위 고정: `A1, C2:D4, C5:D7, A8, C8, D8`
   - **A8 = "현사이클 시작"** (`current_cycle_start`) — "잔금(cash_balance)"과 혼동 금지

@@ -16,6 +16,10 @@
 
 외부 파일/자격증명을 읽는 `@Bean`(예: GoogleSheetsConfig): `@Bean @Lazy` + `@Component @Lazy` + 주입 지점 `@Lazy InterfacePort` 3단 설정 필수 — 하나라도 빠지면 Spring 기동 시 파일 읽기 실패.
 
+## 아웃바운드 OCR
+
+- `GeminiVisionAdapter`: HTTP 429 quota exceeded는 `OcrException("Gemini API 일일한도 초과")`로 분류하고, 기존 Gemini 오류 알림 동작은 유지
+
 ## 인바운드 웹 레이어
 
 - `FidaOrderController`: 2개 엔드포인트 — `POST /orders`(204, 바디 없음), `POST /orders/from-image`(200, KISTA 저장 ID 포함 `FromImageResponse` 반환)
