@@ -231,6 +231,22 @@ class GeminiVisionAdapterTest {
     }
 
     @Test
+    @DisplayName("current_cycle_start가 null이면 자금 표의 현사이클 시작 행으로 보정한다")
+    void analyze_falls_back_to_capital_row_when_current_cycle_start_is_null() {
+        // 운영 사례: Gemini가 오른쪽 상단 자금 표는 읽었지만 current_cycle_start 필드만 null로 반환
+        String geminiJson = """
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":25.95,\\"qty\\":34},{\\"price\\":26.20,\\"qty\\":34}],\\"sell\\":[{\\"price\\":26.48,\\"qty\\":33},{\\"price\\":26.33,\\"qty\\":32},{\\"price\\":27.50,\\"qty\\":30}],\\"current_cycle_start\\":null,\\"capital_rows\\":[{\\"label\\":\\"시즌1 시작원금\\",\\"value\\":10000.00},{\\"label\\":\\"현사이클 시작\\",\\"value\\":11783.18},{\\"label\\":\\"잔금\\",\\"value\\":8283.77}],\\"current_cycle_realized_pnl\\":-17.61,\\"avg_price\\":27.202,\\"cumulative_qty\\":128,\\"holdings\\":128}"}]}}]}
+                """;
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
+
+        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
+
+        assertThat(result.currentCycleStart()).isEqualByComparingTo(new BigDecimal("11783.18"));
+        mockServer.verify();
+    }
+
+    @Test
     @DisplayName("동일 이미지에 항상 같은 결과를 얻기 위해 temperature 0을 요청에 포함한다")
     void request_includes_zero_temperature_for_deterministic_output() {
         String geminiJson = """

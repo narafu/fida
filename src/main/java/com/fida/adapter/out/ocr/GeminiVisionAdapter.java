@@ -42,6 +42,7 @@ public class GeminiVisionAdapter implements OcrPort {
                     "  \"sell\": [{\"price\": 매도가격, \"qty\": 매도수량}],\n" +
                     "  \"current_cycle_start\": 현사이클시작,\n" +
                     "  \"season_start_capital\": 시즌시작원금,\n" +
+                    "  \"capital_rows\": [{\"label\": 자금표라벨, \"value\": 자금표금액}],\n" +
                     "  \"current_cycle_realized_pnl\": 현사이클실현수익,\n" +
                     "  \"avg_price\": 평단,\n" +
                     "  \"holding_qty\": 보유개수후보,\n" +
@@ -64,6 +65,7 @@ public class GeminiVisionAdapter implements OcrPort {
                     "- 달러기호($)/콤마(,) 제거하고 숫자만, 소수점 유지\n" +
                     "- current_cycle_start: 이미지에서 정확히 \"현사이클 시작 $\" 라벨인 행의 값만 사용. 근처에 \"XXXX 시작원금 $\"(연도+시작원금) 라벨의 행이 별도로 있으며 값이 다름 — 해당 행은 사용 금지. 날짜가 아닌 금액임.\n" +
                     "- season_start_capital: 이미지에서 \"XXXX 시작원금 $\"(연도 또는 시즌N+시작원금) 라벨 행의 값. current_cycle_start와 혼동 검증용이므로 별도로 기록. 없으면 null\n" +
+                    "- capital_rows: 오른쪽 상단 자금 표의 라벨/금액 행을 보이는 그대로 모두 기록. 예: [{\"label\":\"시즌1 시작원금\",\"value\":10000.00},{\"label\":\"현사이클 시작\",\"value\":11783.18},{\"label\":\"잔금\",\"value\":8283.77}]\n" +
                     "- current_cycle_realized_pnl: 이미지에서 정확히 \"현사이클 실현수익 $\" 라벨 행의 값만 사용. 바로 아래 \"2026 실현수익 $\"(연간 누적)·\"연간 실현수익 $\" 등 다른 실현수익 항목은 절대 사용 금지. 음수일 수도 있음.\n" +
                     "- avg_price: 이미지 오른쪽 \"평단\" 라벨 옆 셀 값만 사용. 비어있거나 보유개수가 0이면 null. 종가/현재가 등 다른 가격 사용 금지\n" +
                     "- holding_qty: \"보유개수\" 라벨 값만 기록. 없으면 null\n" +
@@ -246,6 +248,7 @@ public class GeminiVisionAdapter implements OcrPort {
             log.info(raw.toString());
 
             int holdings = resolveHoldings(raw);
+            BigDecimal currentCycleStart = resolveCurrentCycleStart(raw);
             BigDecimal avgPrice = (holdings == 0) ? null : raw.avgPrice();
             List<OrderItem> buyOrders = toOrderItems(raw.buy());
             List<OrderItem> sellOrders = toOrderItems(raw.sell());
@@ -258,15 +261,15 @@ public class GeminiVisionAdapter implements OcrPort {
                 log.warn("holdings=0 인데 SELL 주문 존재 — 원문 Gemini 응답:\n{}", text);
             }
             // "현사이클 시작"과 "시즌 시작원금" 행을 혼동한 운영 사례 재발 감지 — 로그 + 텔레그램 경고
-            if (raw.currentCycleStart() != null && raw.seasonStartCapital() != null
-                    && raw.currentCycleStart().compareTo(raw.seasonStartCapital()) == 0) {
-                String warning = "current_cycle_start가 season_start_capital과 동일함(" + raw.currentCycleStart()
+            if (currentCycleStart != null && raw.seasonStartCapital() != null
+                    && currentCycleStart.compareTo(raw.seasonStartCapital()) == 0) {
+                String warning = "current_cycle_start가 season_start_capital과 동일함(" + currentCycleStart
                         + ") — \"현사이클 시작\"/\"시즌 시작원금\" 혼동 파싱 가능성, 시트·KISTA 값 확인 필요";
                 log.warn(warning);
                 safeNotifyOcrWarning(warning);
             }
 
-            return new ParsedOrder(buyOrders, sellOrders, raw.currentCycleStart(), raw.currentCycleRealizedPnl(), avgPrice, holdings);
+            return new ParsedOrder(buyOrders, sellOrders, currentCycleStart, raw.currentCycleRealizedPnl(), avgPrice, holdings);
         } catch (Exception e) {
             log.error("Gemini JSON 파싱 실패 — 원문 응답:\n{}", text, e);
             throw new OcrException("Gemini JSON 파싱 실패: " + text.substring(0, Math.min(300, text.length())), e);
@@ -293,6 +296,22 @@ public class GeminiVisionAdapter implements OcrPort {
             return Math.max(0, raw.holdings());
         }
         return 0;
+    }
+
+    private BigDecimal resolveCurrentCycleStart(GeminiOrderResult raw) {
+        // 모델이 전용 필드만 null로 반환한 경우 오른쪽 상단 자금 표의 정확한 라벨 행으로 보정한다.
+        if (raw.currentCycleStart() != null) {
+            return raw.currentCycleStart();
+        }
+        if (raw.capitalRows() == null) {
+            return null;
+        }
+        return raw.capitalRows().stream()
+                .filter(row -> row.label() != null && row.label().replaceAll("\\s+", "").contains("현사이클시작"))
+                .map(CapitalRow::value)
+                .filter(value -> value != null && value.compareTo(BigDecimal.ZERO) > 0)
+                .findFirst()
+                .orElse(null);
     }
 
     private boolean isPositive(Integer value) {
@@ -326,6 +345,9 @@ public class GeminiVisionAdapter implements OcrPort {
             @JsonDeserialize(using = CommaBigDecimalDeserializer.class)
             BigDecimal seasonStartCapital,
 
+            @com.fasterxml.jackson.annotation.JsonProperty("capital_rows")
+            List<CapitalRow> capitalRows,
+
             @com.fasterxml.jackson.annotation.JsonProperty("current_cycle_realized_pnl")
             @JsonDeserialize(using = CommaBigDecimalDeserializer.class)
             BigDecimal currentCycleRealizedPnl,
@@ -348,4 +370,9 @@ public class GeminiVisionAdapter implements OcrPort {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record RawOrderItem(BigDecimal price, Object qty) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record CapitalRow(String label,
+                      @JsonDeserialize(using = CommaBigDecimalDeserializer.class)
+                      BigDecimal value) {}
 }
