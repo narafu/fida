@@ -15,6 +15,7 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestClientException;
@@ -111,6 +112,12 @@ public class GeminiVisionAdapter implements OcrPort {
             } catch (OcrException e) {
                 // 파싱 오류는 재시도 없이 즉시 rethrow (알림은 위에서 처리)
                 throw e;
+            } catch (HttpClientErrorException.TooManyRequests e) {
+                notifyGeminiQuota();
+                // Gemini 무료 티어 일일 요청 한도 초과 — 네트워크 장애가 아니므로 원인을 명확히 노출
+                log.warn("Gemini API 일일한도 초과 (429): {}", e.getResponseBodyAsString());
+                safeNotifyGeminiError(e);
+                throw new OcrException("Gemini API 일일한도 초과", e);
             } catch (HttpServerErrorException e) {
                 notifyGeminiQuota();
                 if (e.getStatusCode() == HttpStatus.SERVICE_UNAVAILABLE) {

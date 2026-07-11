@@ -195,6 +195,32 @@ class GeminiVisionAdapterTest {
     }
 
     @Test
+    @DisplayName("429 할당량 초과는 통신 오류가 아니라 일일한도 초과로 분류한다")
+    void analyze_classifies_429_quota_exceeded() {
+        String quotaExceededBody = """
+                {
+                  "error": {
+                    "code": 429,
+                    "message": "You exceeded your current quota",
+                    "status": "RESOURCE_EXHAUSTED"
+                  }
+                }
+                """;
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(quotaExceededBody));
+
+        assertThatThrownBy(() -> adapter.analyze(List.of(new byte[]{1})))
+                .isInstanceOf(OcrException.class)
+                .hasMessageContaining("일일한도 초과")
+                .hasMessageNotContaining("통신 오류");
+
+        mockServer.verify();
+        verify(notifyPort, times(1)).notifyGeminiError(any(Exception.class));
+    }
+
+    @Test
     @DisplayName("sell 앞 행이 모두 null이고 마지막 행에만 값이 있어도 sell을 파싱한다")
     void analyze_parses_sell_when_only_last_row_has_data() {
         // 오늘 실제 발생 케이스: Gemini가 sell=[] 반환 → 이 테스트는 Java 필터 로직 검증
