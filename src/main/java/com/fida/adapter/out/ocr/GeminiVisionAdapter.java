@@ -239,6 +239,8 @@ public class GeminiVisionAdapter implements OcrPort {
         }
         // unquoted 숫자 뒤 한글 제거: "holdings": 7년 → "holdings": 7
         jsonStr = KOREAN_IN_NUMBER.matcher(jsonStr).replaceAll("$1");
+        // current_cycle_start 조용한 null 처리(날짜 문자열 등 숫자 변환 실패) 원인 진단용
+        log.info("Gemini 원문 JSON 응답: {}", jsonStr);
         try {
             GeminiOrderResult raw = objectMapper.readValue(jsonStr, GeminiOrderResult.class);
             log.info(raw.toString());
