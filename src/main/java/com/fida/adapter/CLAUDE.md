@@ -25,3 +25,7 @@
 - `FidaOrderController`: 2개 엔드포인트 — `POST /orders`(204, 바디 없음), `POST /orders/from-image`(200, KISTA 저장 ID 포함 `FromImageResponse` 반환)
 - `GlobalExceptionHandler`: `@RestControllerAdvice` 전역 예외 처리 — 새 예외 타입 추가 시 여기도 확인
 - `OpenApiConfig`: Swagger UI 설정 — springdoc 버전은 루트 CLAUDE.md Key Constraints 참조
+
+## 인바운드 스케줄 레이어
+
+- `FandingScheduler`: `@Profile("!job")` 및 `fida.scheduler.enabled=true`일 때만 활성화. Render에서 GitHub Actions만 정식 실행 경로로 사용할 경우 `FIDA_SCHEDULER_ENABLED=false` 설정

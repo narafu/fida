@@ -84,7 +84,7 @@ playwright-server/    ← Node.js 사이드카 (Java로 이식 금지)
 - DB 없음 (JPA/DataSource 추가 금지), RestTemplate 전용 (WebClient 금지)
 - Gemini 모델: `gemini-2.5-flash-lite` 고정
 - Gemini HTTP 429/`RESOURCE_EXHAUSTED`는 `OcrException("Gemini API 일일한도 초과")`로 분류 — 일반 `Gemini API 통신 오류`로 뭉개지 않음
-- 스케줄: 화~토 07:00 KST (`cron = "0 0 7 * * TUE-SAT"`, 변경 금지)
+- 스케줄: 화~토 07:00 KST (`cron = "0 0 7 * * TUE-SAT"`, 변경 금지). `FIDA_SCHEDULER_ENABLED=false`이면 `FandingScheduler` 비활성
 - Google Sheets 셀 범위 고정: `A1, C2:D4, C5:D7, A8, C8, D8`
   - **A8 = "현사이클 시작"** (`current_cycle_start`) — "잔금(cash_balance)"과 혼동 금지
   - A1 날짜 결정: 제목 M/D 패턴 1순위 → scraper postDate 2순위 → `LocalDate.now()` 3순위 (`FandingScraperAdapter.resolveDateFromTitle()`)
@@ -92,7 +92,7 @@ playwright-server/    ← Node.js 사이드카 (Java로 이식 금지)
 - springdoc = "2.8.4" (`gradle/libs.versions.toml`) — 2.6.x는 Spring Boot 3.4.x(Spring Framework 6.2)와 `NoSuchMethodError: ControllerAdviceBean` 충돌 있어 2.7.0+ 유지 필요
 - Docker: ZGC + MaxRAMPercentage=75.0, non-root 실행
 - GitHub Actions one-shot 실행: `SPRING_PROFILES_ACTIVE=job` + `SPRING_MAIN_WEB_APPLICATION_TYPE=none` 필수 조합 — 후자 없으면 ApplicationRunner 완료 후에도 웹서버가 살아 컨테이너 무한 대기
-- Spring Profile: `job` = `FandingRunner`(one-shot) 활성, `FandingScheduler` 비활성 / `!job`(기본, Render 포함) = 반대
+- Spring Profile: `job` = `FandingRunner`(one-shot) 활성, `FandingScheduler` 비활성 / `!job` = `FIDA_SCHEDULER_ENABLED=true`일 때 `FandingScheduler` 활성
 - Mockito로 RestTemplate 테스트 시: `postForObject`는 varargs(`Object... uriVars`)가 있어 URL 매처로 `any()` 대신 `anyString()` 사용 필요
 - Lombok `1.18.36` 적용됨 — `@RequiredArgsConstructor` + `@Slf4j` 사용
   - `@Value` 설정 필드: **non-final로 선언할 것** — `copyableAnnotations`가 CI 환경에서 적용되지 않아 `final`+`@Value` 조합은 GitHub Actions에서 `No qualifying bean of type 'String'` 오류 발생. `@RequiredArgsConstructor`에서 제외되고 Spring이 필드 주입으로 처리함 (`KistaAdapter`, `TelegramAdapter`, `FandingScraperAdapter` 모두 non-final)
@@ -106,10 +106,10 @@ playwright-server/    ← Node.js 사이드카 (Java로 이식 금지)
 - 구현 태스크는 shrimp-task-manager로 관리 중 (`list_tasks`로 확인)
 - **GitHub Actions Cron 전환 완료 및 검증 완료** — `.github/workflows/fida-schedule.yml` (UTC `0 21 * * 1-5` = KST 화~토 06:00; Render 스케줄러 07:00과 1시간 시차 이중화)
 - GitHub Secrets 등록 시 service-account.json: `base64 -i <경로>/service-account.json | tr -d '\n'` → `GOOGLE_SERVICE_ACCOUNT_JSON_B64`로 등록
-- **Render 배포 완료** — `https://fida.onrender.com` (서비스 ID: `srv-d8m9vqcm0tmc73ct17ug`), 기본 프로파일(`!job`)로 스케줄러 활성
+- **Render 배포 완료** — `https://fida.onrender.com` (서비스 ID: `srv-d8m9vqcm0tmc73ct17ug`), GitHub Actions one-shot을 정식 실행 경로로 사용하므로 Render는 `FIDA_SCHEDULER_ENABLED=false` 설정 권장
   - Render Secret Files: 대시보드 → fida 서비스 → Secret Files → 경로 `/secrets/service-account.json`
   - UptimeRobot 헬스체크: `https://fida.onrender.com/actuator/health` (10분 간격, free tier 스핀다운 방지)
-- **이중 실행 설계 (GH Actions + Render 스케줄러)** — KISTA-API에서 중복 요청을 멱등 처리하므로 의도적으로 둘 다 활성화 (누락 방지용 이중화)
+- **정식 자동 실행 경로는 GitHub Actions one-shot** — Render 웹서비스는 수동 API/헬스체크 유지용이며, 무료 서버 메모리 제약으로 playwright-server를 함께 띄우지 않으므로 `FIDA_SCHEDULER_ENABLED=false`로 스케줄러 비활성화 권장
 - KISTA 프로젝트: https://github.com/narafu/kista.git (별도 프로젝트, FIDA가 전송한 주문을 수신해 KIS API로 실행)
 - **KISTA 주문 전송 활성화됨** — `TradingRecordService.process()`: sheet 기록 → 매매 알림 → KISTA 전송 순서. KISTA 실패는 sheet/매매 알림에 영향 없음 (`safeNotify` 패턴)
 - **KISTA 전송 결과(성공/실패)는 별도 텔레그램 메시지로 알림** — 매매 알림과 독립된 2개의 메시지
@@ -142,6 +142,7 @@ playwright-server/    ← Node.js 사이드카 (Java로 이식 금지)
 | `GOOGLE_SERVICE_ACCOUNT_JSON_PATH` | `/secrets/service-account.json` |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | 텔레그램 알림 |
 | `INTERNAL_API_TOKEN` | KISTA 내부 인증 토큰 (`X-Internal-Token` 헤더) |
+| `FIDA_SCHEDULER_ENABLED` | `false`이면 `!job` 프로필에서도 Render 내장 스케줄러 비활성화 (기본 `true`) |
 | `GEMINI_QUOTA_USAGE_PATH` | Gemini 일일 사용량 파일 경로 (기본 `/tmp/fida-gemini-quota-usage.json`) — GH Actions는 `/state/...`로 지정해 cache로 영속화 |
 | `SCRAPER_URL` | 기본값 `http://playwright-server:3000/scrape` — 로컬/Docker Compose 설정 불필요. Render 배포 시 playwright-server URL로 대시보드에서 수동 설정 |
 | `KISTA_URL` | `application.yml` 기본값 `https://kista-api.fly.dev` — 변경 시에만 설정 |

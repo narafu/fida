@@ -4,6 +4,7 @@ import com.fida.domain.port.in.ProcessTradingRecordUseCase;
 import com.fida.domain.port.out.NotifyPort;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Scheduled;
 
@@ -60,5 +61,16 @@ class FandingSchedulerTest {
 
         assertThat(profile).isNotNull();
         assertThat(profile.value()).containsExactly("!job");
+    }
+
+    @Test
+    @DisplayName("FandingScheduler는 fida.scheduler.enabled=false이면 비활성화되어야 한다")
+    void scheduler_can_be_disabled_by_property() {
+        ConditionalOnProperty condition = FandingScheduler.class.getAnnotation(ConditionalOnProperty.class);
+
+        assertThat(condition).isNotNull();
+        assertThat(condition.name()).containsExactly("fida.scheduler.enabled");
+        assertThat(condition.havingValue()).isEqualTo("true");
+        assertThat(condition.matchIfMissing()).isTrue();
     }
 }

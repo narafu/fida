@@ -33,6 +33,10 @@ fanding:
   scraper:
     url: ${SCRAPER_URL:http://playwright-server:3000/scrape}
 
+fida:
+  scheduler:
+    enabled: ${FIDA_SCHEDULER_ENABLED:true}
+
 gemini:
   api-key: ${GEMINI_API_KEY}
 
