@@ -12,10 +12,11 @@ Prevent `/api/fida/orders/from-image` from producing `SELL` orders with `holding
   - `cumulative_qty`
   - `buy_qty`
 - In Java post-processing, resolve final holdings with this priority:
-  - `holding_qty` if positive
   - `cumulative_qty` if positive
+  - `holding_qty` if positive
   - legacy `holdings`
   - otherwise `0`
+- When positive `holding_qty` and `cumulative_qty` disagree, select `cumulative_qty` and emit an OCR warning with both values.
 - Ignore `buy_qty` for final holdings calculation. It is only diagnostic.
 - Keep the existing KISTA validation that blocks `SELL` with zero holdings as the final defense.
 
