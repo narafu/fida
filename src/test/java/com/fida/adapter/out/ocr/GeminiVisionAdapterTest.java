@@ -20,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -253,6 +254,23 @@ class GeminiVisionAdapterTest {
         assertThat(result.sellOrders()).hasSize(1);
         assertThat(result.holdings()).isEqualTo(27);
         assertThat(result.avgPrice()).isEqualByComparingTo(new BigDecimal("35.564"));
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("holding_qty와 cumulative_qty가 다르면 누적개수를 우선하고 경고한다")
+    void analyze_prefers_cumulative_qty_and_warns_when_holding_candidates_disagree() {
+        // 운영 사례: 매수개수 57을 holding_qty로 오인식했지만 누적개수는 74로 정확히 파싱됨
+        String geminiJson = """
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":26.10,\\"qty\\":32},{\\"price\\":26.30,\\"qty\\":32}],\\"sell\\":[{\\"price\\":26.64,\\"qty\\":\\"ALL\\"},{\\"price\\":26.45,\\"qty\\":29}],\\"current_cycle_start\\":11085.99,\\"current_cycle_realized_pnl\\":73.53,\\"avg_price\\":26.525,\\"holding_qty\\":57,\\"cumulative_qty\\":74,\\"buy_qty\\":57,\\"holdings\\":74}"}]}}]}
+                """;
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
+
+        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
+
+        assertThat(result.holdings()).isEqualTo(74);
+        verify(notifyPort).notifyOcrWarning(contains("holding_qty=57, cumulative_qty=74"));
         mockServer.verify();
     }
 

@@ -69,10 +69,10 @@ public class GeminiVisionAdapter implements OcrPort {
                     "- capital_rows: 오른쪽 상단 자금 표의 라벨/금액 행을 보이는 그대로 모두 기록. 예: [{\"label\":\"시즌1 시작원금\",\"value\":10000.00},{\"label\":\"현사이클 시작\",\"value\":11783.18},{\"label\":\"잔금\",\"value\":8283.77}]\n" +
                     "- current_cycle_realized_pnl: 이미지에서 정확히 \"현사이클 실현수익 $\" 라벨 행의 값만 사용. 바로 아래 \"2026 실현수익 $\"(연간 누적)·\"연간 실현수익 $\" 등 다른 실현수익 항목은 절대 사용 금지. 음수일 수도 있음.\n" +
                     "- avg_price: 이미지 오른쪽 \"평단\" 라벨 옆 셀 값만 사용. 비어있거나 보유개수가 0이면 null. 종가/현재가 등 다른 가격 사용 금지\n" +
-                    "- holding_qty: \"보유개수\" 라벨 값만 기록. 없으면 null\n" +
+                    "- holding_qty: 이미지에 정확히 \"보유개수\" 라벨이 보일 때만 그 값을 기록. 라벨이 없으면 반드시 null. \"매수개수\" 값을 복사하지 말 것\n" +
                     "- cumulative_qty: 이미지 하단 왼쪽 표에서 \"누적개수\" 라벨 행의 값(양수 정수). 오른쪽 \"N 배수 예시\" 섹션에도 누적개수가 표시되는 경우가 있으나 그 섹션은 무시. 없으면 null\n" +
                     "- buy_qty: 이미지 하단 왼쪽 표에서 \"매수개수\" 라벨 행의 값. 음수일 수 있음. 없으면 null\n" +
-                    "- holdings: 최종 보유 수량. \"보유개수\"가 있으면 그 값, 없으면 하단 왼쪽 표의 \"누적개수\" 값 사용. \"매수개수\" 사용 금지(매수개수는 음수일 수 있어 혼동 주의). 반드시 0 이상의 정수";
+                    "- holdings: 최종 보유 수량. 하단 왼쪽 표의 \"누적개수\" 값을 우선 사용하고, 누적개수가 없을 때만 \"보유개수\" 값 사용. \"매수개수\" 사용 금지(매수개수는 음수일 수 있어 혼동 주의). 반드시 0 이상의 정수";
 
     private static final int MAX_RETRIES = 3;
     // 테스트에서 ReflectionTestUtils로 0으로 설정 가능
@@ -292,12 +292,19 @@ public class GeminiVisionAdapter implements OcrPort {
     }
 
     private int resolveHoldings(GeminiOrderResult raw) {
-        // 모델이 매수개수를 holdings로 오인식하는 운영 케이스를 방지한다.
+        // 이미지의 명시적 누적개수를 우선해 매수개수를 holding_qty로 오인식한 결과를 차단한다.
+        if (isPositive(raw.cumulativeQty())) {
+            if (isPositive(raw.holdingQty()) && !raw.cumulativeQty().equals(raw.holdingQty())) {
+                String warning = "OCR 수량 불일치: holding_qty=" + raw.holdingQty()
+                        + ", cumulative_qty=" + raw.cumulativeQty()
+                        + " — 누적개수를 최종 보유수량으로 사용";
+                log.warn(warning);
+                safeNotifyOcrWarning(warning);
+            }
+            return raw.cumulativeQty();
+        }
         if (isPositive(raw.holdingQty())) {
             return raw.holdingQty();
-        }
-        if (isPositive(raw.cumulativeQty())) {
-            return raw.cumulativeQty();
         }
         if (raw.holdings() != null) {
             return Math.max(0, raw.holdings());
