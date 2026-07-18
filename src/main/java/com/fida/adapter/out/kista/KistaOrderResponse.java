@@ -9,7 +9,7 @@ import java.util.UUID;
 
 record KistaOrderResponse(
         UUID id,
-        LocalDate tradeDate,
+        LocalDate releaseDate,
         String ticker,
         BigDecimal currentCycleStart,
         BigDecimal currentCycleRealizedPnl,

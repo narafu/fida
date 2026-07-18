@@ -37,18 +37,18 @@ public class KistaAdapter implements KistaPort {
             throw new IllegalStateException("KISTA 응답이 null입니다");
         }
         validate(request, response);
-        return new KistaResult(response.id(), response.tradeDate(), response.ticker(),
+        return new KistaResult(response.id(), response.releaseDate(), response.ticker(),
                 response.currentCycleStart(), response.currentCycleRealizedPnl(),
                 response.avgPrice(), response.holdings(), response.orders());
     }
 
     private void validate(FidaOrderRequest req, KistaOrderResponse res) {
-        if (!req.tradeDate().equals(res.tradeDate())
+        if (!req.tradeDate().equals(res.releaseDate())
                 || req.holdings() != res.holdings()
                 || req.orders().size() != res.orders().size()) {
             throw new IllegalStateException(String.format(
                     "KISTA 응답 불일치 — tradeDate: %s→%s, holdings: %d→%d, orders: %d→%d",
-                    req.tradeDate(), res.tradeDate(),
+                    req.tradeDate(), res.releaseDate(),
                     req.holdings(), res.holdings(),
                     req.orders().size(), res.orders().size()
             ));
