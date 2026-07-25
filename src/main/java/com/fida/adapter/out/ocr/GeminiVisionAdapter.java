@@ -44,6 +44,7 @@ public class GeminiVisionAdapter implements OcrPort {
                     "  \"current_cycle_start\": 현사이클시작,\n" +
                     "  \"season_start_capital\": 시즌시작원금,\n" +
                     "  \"capital_rows\": [{\"label\": 자금표라벨, \"value\": 자금표금액}],\n" +
+                    "  \"performance_rows\": [{\"label\": 성과표라벨, \"value\": 성과표금액}],\n" +
                     "  \"current_cycle_realized_pnl\": 현사이클실현수익,\n" +
                     "  \"avg_price\": 평단,\n" +
                     "  \"holding_qty\": 보유개수후보,\n" +
@@ -67,7 +68,8 @@ public class GeminiVisionAdapter implements OcrPort {
                     "- current_cycle_start: 이미지에서 정확히 \"현사이클 시작 $\" 라벨인 행의 값만 사용. 근처에 \"XXXX 시작원금 $\"(연도+시작원금) 라벨의 행이 별도로 있으며 값이 다름 — 해당 행은 사용 금지. 날짜가 아닌 금액임.\n" +
                     "- season_start_capital: 이미지에서 \"XXXX 시작원금 $\"(연도 또는 시즌N+시작원금) 라벨 행의 값. current_cycle_start와 혼동 검증용이므로 별도로 기록. 없으면 null\n" +
                     "- capital_rows: 오른쪽 상단 자금 표의 라벨/금액 행을 보이는 그대로 모두 기록. 예: [{\"label\":\"시즌1 시작원금\",\"value\":10000.00},{\"label\":\"현사이클 시작\",\"value\":11783.18},{\"label\":\"잔금\",\"value\":8283.77}]\n" +
-                    "- current_cycle_realized_pnl: 이미지에서 정확히 \"현사이클 실현수익 $\" 라벨 행의 값만 사용. 바로 아래 \"2026 실현수익 $\"(연간 누적)·\"연간 실현수익 $\"·\"시즌N 실현수익 $\"·\"시즌N 실현수익률\" 등 다른 실현수익/수익률 항목은 절대 사용 금지. \"현사이클 실현수익 $\" 라벨이 이미지에 보이면 값이 반드시 존재하므로 null로 응답하지 말 것. 음수일 수도 있음.\n" +
+                    "- performance_rows: 오른쪽 성과 표(종가·평단·현사이클 실현수익·시즌N 실현수익·시즌N 실현수익률)의 라벨/값 행을 보이는 그대로 모두 기록. 값이 0.00이어도 그대로 기록(생략 금지). 예: [{\"label\":\"종가\",\"value\":65.23},{\"label\":\"평단\",\"value\":64.684},{\"label\":\"현사이클 실현수익\",\"value\":0.00},{\"label\":\"시즌2 실현수익\",\"value\":1431.10},{\"label\":\"시즌2 실현수익률\",\"value\":14.31}]\n" +
+                    "- current_cycle_realized_pnl: performance_rows와 별개로 이미지에서 정확히 \"현사이클 실현수익 $\" 라벨 행의 값만 사용(참고용 필드, performance_rows가 신뢰 소스). 바로 아래 \"2026 실현수익 $\"(연간 누적)·\"연간 실현수익 $\"·\"시즌N 실현수익 $\"·\"시즌N 실현수익률\" 등 다른 실현수익/수익률 항목은 절대 사용 금지. 값이 0.00이어도 그대로 사용. 음수일 수도 있음.\n" +
                     "- avg_price: 이미지 오른쪽 \"평단\" 라벨 옆 셀 값만 사용. 비어있거나 보유개수가 0이면 null. 종가/현재가 등 다른 가격 사용 금지\n" +
                     "- holding_qty: 이미지에 정확히 \"보유개수\" 라벨이 보일 때만 그 값을 기록. 라벨이 없으면 반드시 null. \"매수개수\" 값을 복사하지 말 것\n" +
                     "- cumulative_qty: 이미지 하단 왼쪽 표에서 \"누적개수\" 라벨 행의 값(양수 정수). 오른쪽 \"N 배수 예시\" 섹션에도 누적개수가 표시되는 경우가 있으나 그 섹션은 무시. 없으면 null\n" +
@@ -276,7 +278,7 @@ public class GeminiVisionAdapter implements OcrPort {
                 safeNotifyOcrWarning(warning);
             }
 
-            return new ParsedOrder(buyOrders, sellOrders, currentCycleStart, raw.currentCycleRealizedPnl(), avgPrice, holdings);
+            return new ParsedOrder(buyOrders, sellOrders, currentCycleStart, resolveCurrentCycleRealizedPnl(raw), avgPrice, holdings);
         } catch (Exception e) {
             log.error("Gemini JSON 파싱 실패 — 원문 응답:\n{}", text, e);
             throw new OcrException("Gemini JSON 파싱 실패: " + text.substring(0, Math.min(300, text.length())), e);
@@ -328,6 +330,34 @@ public class GeminiVisionAdapter implements OcrPort {
                 .orElse(null);
     }
 
+    private BigDecimal resolveCurrentCycleRealizedPnl(GeminiOrderResult raw) {
+        // 모델이 인접한 "시즌N 실현수익" 행과 혼동해 current_cycle_realized_pnl을 잘못 채우는 사례가 있어,
+        // 라벨로 구분되는 performance_rows를 우선 신뢰하고 직접 필드는 라벨 매칭 실패 시 폴백으로만 사용한다.
+        BigDecimal fromRows = findPerformanceRowValue(raw, "현사이클실현수익");
+        if (fromRows == null) {
+            return raw.currentCycleRealizedPnl();
+        }
+        if (raw.currentCycleRealizedPnl() != null && fromRows.compareTo(raw.currentCycleRealizedPnl()) != 0) {
+            String warning = "OCR 실현수익 불일치: current_cycle_realized_pnl=" + raw.currentCycleRealizedPnl()
+                    + ", performance_rows 기준=" + fromRows + " — \"현사이클 실현수익\"/\"시즌N 실현수익\" 혼동 가능성, performance_rows 값 사용";
+            log.warn(warning);
+            safeNotifyOcrWarning(warning);
+        }
+        return fromRows;
+    }
+
+    private BigDecimal findPerformanceRowValue(GeminiOrderResult raw, String normalizedLabel) {
+        if (raw.performanceRows() == null) {
+            return null;
+        }
+        return raw.performanceRows().stream()
+                .filter(row -> row.label() != null && row.label().replaceAll("\\s+", "").contains(normalizedLabel))
+                .map(CapitalRow::value)
+                .filter(java.util.Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+    }
+
     private boolean isPositive(Integer value) {
         return value != null && value > 0;
     }
@@ -361,6 +391,9 @@ public class GeminiVisionAdapter implements OcrPort {
 
             @com.fasterxml.jackson.annotation.JsonProperty("capital_rows")
             List<CapitalRow> capitalRows,
+
+            @com.fasterxml.jackson.annotation.JsonProperty("performance_rows")
+            List<CapitalRow> performanceRows,
 
             @com.fasterxml.jackson.annotation.JsonProperty("current_cycle_realized_pnl")
             @JsonDeserialize(using = CommaBigDecimalDeserializer.class)
