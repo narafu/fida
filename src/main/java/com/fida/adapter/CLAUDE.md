@@ -19,6 +19,7 @@
 ## 아웃바운드 OCR
 
 - `GeminiVisionAdapter`: HTTP 429 quota exceeded는 `OcrException("Gemini API 일일한도 초과")`로 분류하고, 기존 Gemini 오류 알림 동작은 유지
+- 매도 OCR은 `sell_rows`에 빈 행을 포함한 물리적 3개 행을 순서대로 유지하고, 정규화된 `sell`이 비었을 때만 값이 있는 행을 폴백으로 사용
 
 ## 인바운드 웹 레이어
 
