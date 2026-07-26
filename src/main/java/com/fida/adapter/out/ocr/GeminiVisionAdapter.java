@@ -41,6 +41,7 @@ public class GeminiVisionAdapter implements OcrPort {
                     "{\n" +
                     "  \"buy\": [{\"price\": 매수가격, \"qty\": 매수수량}],\n" +
                     "  \"sell\": [{\"price\": 매도가격, \"qty\": 매도수량}],\n" +
+                    "  \"sell_rows\": [{\"price\": 매도표행가격, \"qty\": 매도표행수량}],\n" +
                     "  \"current_cycle_start\": 현사이클시작,\n" +
                     "  \"season_start_capital\": 시즌시작원금,\n" +
                     "  \"capital_rows\": [{\"label\": 자금표라벨, \"value\": 자금표금액}],\n" +
@@ -56,6 +57,7 @@ public class GeminiVisionAdapter implements OcrPort {
                     "- 이미지에 \"Limit Vwap\" 블록이 두 개 있음\n" +
                     "- 첫 번째 블록 헤더가 \"매수가\"이면 → buy 배열에 입력 (최대 3행)\n" +
                     "- 두 번째 블록 헤더가 \"매도가\"이면 → sell 배열에 입력 (최대 3행)\n" +
+                    "- sell_rows는 왼쪽 매도가 표의 물리적 3개 행을 위에서부터 순서대로 반드시 모두 입력. 빈 행도 생략하지 말고 {\"price\": null, \"qty\": null}로 입력해 배열 길이를 정확히 3으로 유지\n" +
                     "- 각 섹션 내 행의 가격이나 수량이 \"-\"이면 해당 항목은 null\n" +
                     "- 섹션 내 빈 행(가격·수량 모두 \"-\")은 건너뜀. 값이 있는 행은 위치(첫째·둘째·셋째)에 무관하게 반드시 포함\n" +
                     "  예: 매도가 섹션이 [-/-, -/-, 236.54/남은전부]이면 → sell: [{\"price\": 236.54, \"qty\": \"ALL\"}]\n" +
@@ -260,7 +262,7 @@ public class GeminiVisionAdapter implements OcrPort {
             BigDecimal currentCycleStart = resolveCurrentCycleStart(raw);
             BigDecimal avgPrice = (holdings == 0) ? null : raw.avgPrice();
             List<OrderItem> buyOrders = toOrderItems(raw.buy());
-            List<OrderItem> sellOrders = toOrderItems(raw.sell());
+            List<OrderItem> sellOrders = resolveSellOrders(raw);
             // sell이 비어있으면 Gemini가 매도 주문을 누락했을 가능성 — 로그로 원인 추적
             if (sellOrders.isEmpty()) {
                 log.warn("Gemini sell 파싱 결과 비어있음 — 원시 sell 데이터: {}", raw.sell());
@@ -291,6 +293,22 @@ public class GeminiVisionAdapter implements OcrPort {
                 .filter(i -> i.price() != null || i.qty() != null)
                 .map(i -> new OrderItem(i.price(), i.qty() != null ? String.valueOf(i.qty()) : null))
                 .toList();
+    }
+
+    private List<OrderItem> resolveSellOrders(GeminiOrderResult raw) {
+        List<OrderItem> sellOrders = toOrderItems(raw.sell());
+        if (!sellOrders.isEmpty()) {
+            return sellOrders;
+        }
+
+        // 정규화된 sell이 비었을 때만 물리적 매도 3개 행에서 실제 값이 있는 행을 복구한다.
+        List<OrderItem> recovered = toOrderItems(raw.sellRows());
+        if (!recovered.isEmpty()) {
+            String warning = "Gemini sell 누락을 sell_rows에서 복구: " + recovered;
+            log.warn(warning);
+            safeNotifyOcrWarning(warning);
+        }
+        return recovered;
     }
 
     private int resolveHoldings(GeminiOrderResult raw) {
@@ -380,6 +398,9 @@ public class GeminiVisionAdapter implements OcrPort {
     record GeminiOrderResult(
             List<RawOrderItem> buy,
             List<RawOrderItem> sell,
+
+            @com.fasterxml.jackson.annotation.JsonProperty("sell_rows")
+            List<RawOrderItem> sellRows,
 
             @com.fasterxml.jackson.annotation.JsonProperty("current_cycle_start")
             @JsonDeserialize(using = CommaBigDecimalDeserializer.class)

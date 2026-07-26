@@ -241,6 +241,53 @@ class GeminiVisionAdapterTest {
     }
 
     @Test
+    @DisplayName("sell이 비어도 sell_rows의 마지막 유효 행에서 매도 주문을 복구한다")
+    void analyze_recovers_sell_from_sell_rows_when_sell_is_empty() {
+        // 운영 사례: 앞의 두 매도 행이 비어 있어 Gemini가 정규화된 sell 배열에서 마지막 주문까지 누락함
+        String geminiJson = """
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":110.96,\\"qty\\":7},{\\"price\\":111.24,\\"qty\\":7}],\\"sell\\":[],\\"sell_rows\\":[{\\"price\\":null,\\"qty\\":null},{\\"price\\":null,\\"qty\\":null},{\\"price\\":112.79,\\"qty\\":\\"ALL\\"}],\\"current_cycle_start\\":12001.10,\\"current_cycle_realized_pnl\\":0,\\"avg_price\\":111.262,\\"cumulative_qty\\":7,\\"holdings\\":7}"}]}}]}
+                """;
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
+
+        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
+
+        assertThat(result.sellOrders()).containsExactly(new OrderItem(new BigDecimal("112.79"), "ALL"));
+        verify(notifyPort).notifyOcrWarning(contains("sell_rows"));
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("sell과 sell_rows의 세 행이 모두 비어 있으면 매도 주문을 만들지 않는다")
+    void analyze_keeps_sell_empty_when_all_sell_rows_are_empty() {
+        String geminiJson = """
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"sell_rows\\":[{\\"price\\":null,\\"qty\\":null},{\\"price\\":null,\\"qty\\":null},{\\"price\\":null,\\"qty\\":null}],\\"current_cycle_start\\":12001.10,\\"avg_price\\":111.262,\\"cumulative_qty\\":7,\\"holdings\\":7}"}]}}]}
+                """;
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
+
+        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
+
+        assertThat(result.sellOrders()).isEmpty();
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("sell에 주문이 있으면 sell_rows를 폴백으로 중복 추가하지 않는다")
+    void analyze_prefers_sell_over_sell_rows() {
+        String geminiJson = """
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[{\\"price\\":112.79,\\"qty\\":\\"ALL\\"}],\\"sell_rows\\":[{\\"price\\":null,\\"qty\\":null},{\\"price\\":null,\\"qty\\":null},{\\"price\\":112.79,\\"qty\\":\\"ALL\\"}],\\"current_cycle_start\\":12001.10,\\"avg_price\\":111.262,\\"cumulative_qty\\":7,\\"holdings\\":7}"}]}}]}
+                """;
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
+
+        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
+
+        assertThat(result.sellOrders()).containsExactly(new OrderItem(new BigDecimal("112.79"), "ALL"));
+        mockServer.verify();
+    }
+
+    @Test
     @DisplayName("holdings가 0이어도 cumulative_qty가 있으면 이를 우선 사용한다")
     void analyze_prefers_cumulative_qty_when_holdings_is_zero() {
         String geminiJson = """
