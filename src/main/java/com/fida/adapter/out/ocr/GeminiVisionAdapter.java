@@ -22,6 +22,7 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -77,6 +78,10 @@ public class GeminiVisionAdapter implements OcrPort {
                     "- cumulative_qty: 이미지 하단 왼쪽 표에서 \"누적개수\" 라벨 행의 값(양수 정수). 오른쪽 \"N 배수 예시\" 섹션에도 누적개수가 표시되는 경우가 있으나 그 섹션은 무시. 없으면 null\n" +
                     "- buy_qty: 이미지 하단 왼쪽 표에서 \"매수개수\" 라벨 행의 값. 음수일 수 있음. 없으면 null\n" +
                     "- holdings: 최종 보유 수량. 하단 왼쪽 표의 \"누적개수\" 값을 우선 사용하고, 누적개수가 없을 때만 \"보유개수\" 값 사용. \"매수개수\" 사용 금지(매수개수는 음수일 수 있어 혼동 주의). 반드시 0 이상의 정수";
+
+    // current_cycle_start가 (잔금+보유평가액) 대비 이 배율을 벗어나면 OCR 오판독으로 의심
+    private static final BigDecimal CURRENT_CYCLE_START_RATIO_MAX = new BigDecimal("5");
+    private static final BigDecimal CURRENT_CYCLE_START_RATIO_MIN = new BigDecimal("0.2");
 
     private static final int MAX_RETRIES = 3;
     // 테스트에서 ReflectionTestUtils로 0으로 설정 가능
@@ -279,6 +284,8 @@ public class GeminiVisionAdapter implements OcrPort {
                 log.warn(warning);
                 safeNotifyOcrWarning(warning);
             }
+            // 운영 사례(2026-07-30): 이미지 숫자 자체를 오판독해 현사이클 시작이 실제보다 10배 가까이 크게 나온 사례 재발 감지
+            checkCurrentCycleStartPlausibility(raw, currentCycleStart, holdings, avgPrice);
 
             return new ParsedOrder(buyOrders, sellOrders, currentCycleStart, resolveCurrentCycleRealizedPnl(raw), avgPrice, holdings);
         } catch (Exception e) {
@@ -344,6 +351,42 @@ public class GeminiVisionAdapter implements OcrPort {
                 .filter(row -> row.label() != null && row.label().replaceAll("\\s+", "").contains("현사이클시작"))
                 .map(CapitalRow::value)
                 .filter(value -> value != null && value.compareTo(BigDecimal.ZERO) > 0)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private void checkCurrentCycleStartPlausibility(GeminiOrderResult raw, BigDecimal currentCycleStart,
+                                                      int holdings, BigDecimal avgPrice) {
+        if (currentCycleStart == null) {
+            return;
+        }
+        BigDecimal cashBalance = findCapitalRowValue(raw, "잔금");
+        if (cashBalance == null) {
+            return;
+        }
+        // 보유 평가액 = 평단 x 보유수량 (보유 없으면 0)
+        BigDecimal holdingsValue = avgPrice != null ? avgPrice.multiply(BigDecimal.valueOf(holdings)) : BigDecimal.ZERO;
+        BigDecimal expected = cashBalance.add(holdingsValue);
+        if (expected.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+        BigDecimal ratio = currentCycleStart.divide(expected, 4, RoundingMode.HALF_UP);
+        if (ratio.compareTo(CURRENT_CYCLE_START_RATIO_MAX) > 0 || ratio.compareTo(CURRENT_CYCLE_START_RATIO_MIN) < 0) {
+            String warning = "OCR current_cycle_start 이상치 의심: current_cycle_start=" + currentCycleStart
+                    + ", 잔금+보유평가액 추정치=" + expected + " (비율=" + ratio + ") — 이미지 오판독 가능성, 시트·KISTA 값 확인 필요";
+            log.warn(warning);
+            safeNotifyOcrWarning(warning);
+        }
+    }
+
+    private BigDecimal findCapitalRowValue(GeminiOrderResult raw, String normalizedLabel) {
+        if (raw.capitalRows() == null) {
+            return null;
+        }
+        return raw.capitalRows().stream()
+                .filter(row -> row.label() != null && row.label().replaceAll("\\s+", "").contains(normalizedLabel))
+                .map(CapitalRow::value)
+                .filter(java.util.Objects::nonNull)
                 .findFirst()
                 .orElse(null);
     }

@@ -370,6 +370,37 @@ class GeminiVisionAdapterTest {
     }
 
     @Test
+    @DisplayName("current_cycle_start가 잔금+보유평가액 대비 비정상적으로 크면 경고 로그를 남긴다")
+    void analyze_warns_when_current_cycle_start_implausible_vs_cash_and_holdings_value() {
+        // 운영 사례(2026-07-30): Gemini가 이미지 숫자를 오판독해 현사이클 시작을 143467.67로 반환
+        // (잔금 2934.92 + 보유 91주 x 평단 127.458 = 약 14533.6로 실제 값과 10배 가까이 차이)
+        String geminiJson = """
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":143467.67,\\"season_start_capital\\":10000.00,\\"capital_rows\\":[{\\"label\\":\\"잔금 $\\",\\"value\\":2934.92}],\\"avg_price\\":127.458,\\"holdings\\":91}"}]}}]}
+                """;
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
+
+        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
+
+        assertThat(result.currentCycleStart()).isEqualByComparingTo(new BigDecimal("143467.67"));
+        verify(notifyPort).notifyOcrWarning(contains("current_cycle_start 이상치 의심"));
+    }
+
+    @Test
+    @DisplayName("current_cycle_start가 잔금+보유평가액과 비슷하면 경고하지 않는다")
+    void analyze_does_not_warn_when_current_cycle_start_plausible() {
+        String geminiJson = """
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":14533.60,\\"season_start_capital\\":10000.00,\\"capital_rows\\":[{\\"label\\":\\"잔금 $\\",\\"value\\":2934.92}],\\"avg_price\\":127.458,\\"holdings\\":91}"}]}}]}
+                """;
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
+
+        adapter.analyze(List.of(new byte[]{1}));
+
+        verify(notifyPort, times(0)).notifyOcrWarning(contains("current_cycle_start 이상치 의심"));
+    }
+
+    @Test
     @DisplayName("JPEG 매직바이트 이미지는 mime_type을 image/jpeg로 감지해 전송한다")
     void request_detects_jpeg_mime_type_from_magic_bytes() {
         // /orders/from-image는 업로드 포맷을 검증하지 않으므로, JPEG를 image/png로 잘못 표기해
