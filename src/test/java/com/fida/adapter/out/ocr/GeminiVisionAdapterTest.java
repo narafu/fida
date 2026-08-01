@@ -288,6 +288,26 @@ class GeminiVisionAdapterTest {
     }
 
     @Test
+    @DisplayName("sell에 유효 행이 있어도 sell_rows에 더 많은 유효 행이 있으면 sell_rows로 부분 누락을 복구한다")
+    void analyze_recovers_sell_from_sell_rows_when_sell_partially_drops_valid_rows() {
+        // 운영 사례(2026-05-28): 매도가 2행(218.23/4주)이 sell 배열에서 누락되고 3행(218.92/남은전부)만 남아
+        // KISTA로 SELL 1건만 전송됨. sell_rows에는 2행이 온전히 보존되어 있어 이를 근거로 복구한다.
+        String geminiJson = """
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":216.84,\\"qty\\":4},{\\"price\\":217.77,\\"qty\\":4}],\\"sell\\":[{\\"price\\":218.92,\\"qty\\":\\"ALL\\"}],\\"sell_rows\\":[{\\"price\\":null,\\"qty\\":null},{\\"price\\":218.23,\\"qty\\":4},{\\"price\\":218.92,\\"qty\\":\\"ALL\\"}],\\"current_cycle_start\\":13158.78,\\"current_cycle_realized_pnl\\":0,\\"avg_price\\":217.897,\\"cumulative_qty\\":7,\\"holdings\\":7}"}]}}]}
+                """;
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
+
+        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
+
+        assertThat(result.sellOrders()).containsExactly(
+                new OrderItem(new BigDecimal("218.23"), "4"),
+                new OrderItem(new BigDecimal("218.92"), "ALL"));
+        verify(notifyPort).notifyOcrWarning(contains("부분 누락"));
+        mockServer.verify();
+    }
+
+    @Test
     @DisplayName("holdings가 0이어도 cumulative_qty가 있으면 이를 우선 사용한다")
     void analyze_prefers_cumulative_qty_when_holdings_is_zero() {
         String geminiJson = """

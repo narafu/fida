@@ -304,18 +304,19 @@ public class GeminiVisionAdapter implements OcrPort {
 
     private List<OrderItem> resolveSellOrders(GeminiOrderResult raw) {
         List<OrderItem> sellOrders = toOrderItems(raw.sell());
-        if (!sellOrders.isEmpty()) {
+        List<OrderItem> sellRows = toOrderItems(raw.sellRows());
+
+        // 운영 사례(2026-05-28): sell이 비어있지 않아도 일부 유효 행만 담고 다른 행을 누락시킬 수 있음 —
+        // 물리적 3행을 보존하는 sell_rows의 유효 행 수가 sell보다 많으면(전체/부분 누락) sell_rows를 신뢰한다.
+        if (sellRows.size() <= sellOrders.size()) {
             return sellOrders;
         }
-
-        // 정규화된 sell이 비었을 때만 물리적 매도 3개 행에서 실제 값이 있는 행을 복구한다.
-        List<OrderItem> recovered = toOrderItems(raw.sellRows());
-        if (!recovered.isEmpty()) {
-            String warning = "Gemini sell 누락을 sell_rows에서 복구: " + recovered;
-            log.warn(warning);
-            safeNotifyOcrWarning(warning);
-        }
-        return recovered;
+        String warning = sellOrders.isEmpty()
+                ? "Gemini sell 누락을 sell_rows에서 복구: " + sellRows
+                : "Gemini sell 부분 누락 감지(sell=" + sellOrders + ", sell_rows=" + sellRows + ") — sell_rows 전체를 사용";
+        log.warn(warning);
+        safeNotifyOcrWarning(warning);
+        return sellRows;
     }
 
     private int resolveHoldings(GeminiOrderResult raw) {
