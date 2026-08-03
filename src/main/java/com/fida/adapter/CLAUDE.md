@@ -30,4 +30,4 @@
 
 ## 인바운드 스케줄 레이어
 
-- `FandingScheduler`: `@Profile("!job")` 및 `fida.scheduler.enabled=true`일 때만 활성화. Render에서 GitHub Actions만 정식 실행 경로로 사용할 경우 `FIDA_SCHEDULER_ENABLED=false` 설정
+- `FandingScheduler`: `@Profile("!job")` 및 `fida.scheduler.enabled=true`일 때만 활성화. OCI 상시 기동 서버에서의 정식 자동 실행 경로이며, `FIDA_SCHEDULER_ENABLED`(기본 `true`)로 제어

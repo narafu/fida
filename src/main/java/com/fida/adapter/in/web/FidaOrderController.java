@@ -37,7 +37,7 @@ public class FidaOrderController {
 
                     ⚠️ 로컬/Docker Compose 환경 전용: fanding.kr SPA 로그인·스크래핑을 위해 \
                     playwright-server 사이드카가 반드시 실행 중이어야 합니다. \
-                    Render 등 playwright-server 없는 환경에서 호출 시 503 오류가 발생합니다."""
+                    playwright-server가 없는 환경에서 호출 시 503 오류가 발생합니다."""
     )
     @ApiResponse(responseCode = "204", description = "파이프라인 처리 완료 (응답 바디 없음)")
     @PostMapping("/orders")
