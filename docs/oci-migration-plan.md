@@ -4,10 +4,18 @@
 
 fida는 현재 Render 무료 티어(콜드스타트·메모리 제약)+GitHub Actions cron 이중화 구조로 운영 중이며, 이 구조 자체가 "GH Actions one-shot이 정식 실행 경로"인 이유였다. kista-api를 상시 기동 OCI 서버(2 OCPU/12GB, arm64)로 이전하면서 fida도 같은 서버에 올려 이 제약을 없앤다. kista-api 세션에서는 이미 Caddy·shared_net 변경 런북만 문서화해두고 실제 적용은 fida 커트오버 시점으로 보류해둔 상태(`kista-api` 저장소 커밋 `a334aca8`). 이번 작업은 fida 저장소가 독립적으로 소유하는 부분만 다룬다.
 
-사용자 확정 사항:
+사용자 확정 사항 (재확인 불필요, 아래는 이미 결정된 값):
 - Render 배포 **완전 폐기** (render.yaml 삭제, 관련 서술 제거)
 - `secrets/service-account.json`은 서버에서 **직접 관리** (kista-api `.env` 패턴과 동일, Actions가 만들지 않음)
 - `FIDA_DOMAIN=fida.kista-app.com` (kista-api `.env`에도 이 값을 사용자가 직접 반영해야 함 — fida 저장소 워크플로가 건드릴 수 없는 영역)
+
+kista-api 저장소 로컬 경로(패턴 참고용, 이 문서에서 언급하는 `HeartbeatPort`/`HeartbeatAdapter`/`HeartbeatConfig`/`server-deploy.yml`/`fly-deploy.yml`/`deploy/server/docker-compose.yml`/`deploy/server/Caddyfile`/`deploy/server/README.md`가 모두 여기 있음):
+```
+C:\Users\USER\workspace\kista\kista-api\
+```
+- 참고: `src/main/java/com/kista/domain/port/out/HeartbeatPort.java`, `src/main/java/com/kista/adapter/out/heartbeat/{HeartbeatAdapter,HeartbeatConfig,HeartbeatProperties}.java`
+- 참고: `.github/workflows/{server-deploy,fly-deploy}.yml`
+- 참고: `deploy/server/{docker-compose.yml,Caddyfile,README.md}` (README.md의 "fida 병행 배포" 섹션, 커밋 `a334aca8`에 fida 쪽 셀프서브 요구사항 — shared_net/FIDA_DOMAIN 적용 순서 — 이 문서화되어 있음)
 
 ## 변경 파일 및 내용
 
