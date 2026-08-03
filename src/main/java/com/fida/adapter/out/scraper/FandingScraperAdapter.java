@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
@@ -30,17 +31,20 @@ public class FandingScraperAdapter implements ScraperPort {
         ScrapeResponse response;
         try {
             response = restTemplate.getForObject(scraperUrl, ScrapeResponse.class);
+        } catch (HttpStatusCodeException e) {
+            throw new ScraperException("playwright-server 호출 실패: " + e.getStatusCode()
+                    + " body=" + e.getResponseBodyAsString(), e);
         } catch (RestClientException e) {
             throw new ScraperException("playwright-server 호출 실패: " + e.getMessage(), e);
         }
-        validate(response, "스크래핑 실패");
+        validate(response);
         return toScrapedPost(response);
     }
 
-    private void validate(ScrapeResponse response, String contextMsg) {
+    private void validate(ScrapeResponse response) {
         if (response == null || !response.success()) {
             String error = response != null ? response.error() : "null 응답";
-            throw new ScraperException(contextMsg + ": " + error);
+            throw new ScraperException("스크래핑 실패: " + error);
         }
     }
 
@@ -61,13 +65,22 @@ public class FandingScraperAdapter implements ScraperPort {
     private static final Pattern TITLE_DATE_PATTERN = Pattern.compile("(\\d{1,2})/(\\d{1,2})");
 
     private LocalDate resolveDateFromTitle(String title) {
+        return resolveDateFromTitle(title, LocalDate.now());
+    }
+
+    LocalDate resolveDateFromTitle(String title, LocalDate today) {
         if (title == null) return null;
         var m = TITLE_DATE_PATTERN.matcher(title);
         if (!m.find()) return null;
         try {
-            return LocalDate.of(LocalDate.now().getYear(),
+            LocalDate candidate = LocalDate.of(today.getYear(),
                     Integer.parseInt(m.group(1)),
                     Integer.parseInt(m.group(2)));
+            // 연초에 전년도 연말 게시글을 처리하는 경우: 6개월 초과 미래 날짜는 전년도로 해석
+            if (candidate.isAfter(today.plusMonths(6))) {
+                candidate = candidate.minusYears(1);
+            }
+            return candidate;
         } catch (DateTimeException e) {
             return null;
         }

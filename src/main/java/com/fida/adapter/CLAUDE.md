@@ -16,8 +16,18 @@
 
 외부 파일/자격증명을 읽는 `@Bean`(예: GoogleSheetsConfig): `@Bean @Lazy` + `@Component @Lazy` + 주입 지점 `@Lazy InterfacePort` 3단 설정 필수 — 하나라도 빠지면 Spring 기동 시 파일 읽기 실패.
 
+## 아웃바운드 OCR
+
+- `GeminiVisionAdapter`: HTTP 429 quota exceeded는 `OcrException("Gemini API 일일한도 초과")`로 분류하고, 기존 Gemini 오류 알림 동작은 유지
+- 매도 OCR은 `sell_rows`에 빈 행을 포함한 물리적 3개 행을 순서대로 유지하고, 정규화된 `sell`이 비었을 때만 값이 있는 행을 폴백으로 사용
+- `sell`이 비어있지 않아도 `sell_rows`의 유효 행 수가 더 많으면(부분 누락) `sell_rows` 전체로 대체 — `GeminiVisionAdapter.resolveSellOrders()` 참조
+
 ## 인바운드 웹 레이어
 
-- `FidaOrderController`: `/api/fida/orders` 3개 엔드포인트 — 모두 204 반환, 응답 바디 없음
+- `FidaOrderController`: 2개 엔드포인트 — `POST /orders`(204, 바디 없음), `POST /orders/from-image`(200, KISTA 저장 ID 포함 `FromImageResponse` 반환)
 - `GlobalExceptionHandler`: `@RestControllerAdvice` 전역 예외 처리 — 새 예외 타입 추가 시 여기도 확인
 - `OpenApiConfig`: Swagger UI 설정 — springdoc 버전은 루트 CLAUDE.md Key Constraints 참조
+
+## 인바운드 스케줄 레이어
+
+- `FandingScheduler`: `@Profile("!job")` 및 `fida.scheduler.enabled=true`일 때만 활성화. Render에서 GitHub Actions만 정식 실행 경로로 사용할 경우 `FIDA_SCHEDULER_ENABLED=false` 설정

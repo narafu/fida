@@ -16,7 +16,6 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
 
 @Slf4j
 @Service
@@ -26,10 +25,10 @@ public class TradingRecordService implements ProcessTradingRecordUseCase, Proces
     private final OcrPort ocr;
     private final SheetPort sheet;
     private final NotifyPort notify;
-    private final Optional<KistaPort> kista;
+    private final KistaPort kista;
 
     public TradingRecordService(ScraperPort scraper, OcrPort ocr, @Lazy SheetPort sheet,
-                                NotifyPort notify, Optional<KistaPort> kista) {
+                                NotifyPort notify, KistaPort kista) {
         this.scraper = scraper;
         this.ocr = ocr;
         this.sheet = sheet;
@@ -48,8 +47,7 @@ public class TradingRecordService implements ProcessTradingRecordUseCase, Proces
         var post = new ScrapedPost("수동 분석", tradeDate, "-", List.of(image));
         var order = ocr.analyze(post.images());
         var record = TradingRecord.of(post, order);
-        var k = kista.orElseThrow(() -> new IllegalStateException("KISTA 포트가 설정되지 않았습니다"));
-        var result = k.sendOrders(record);
+        var result = kista.sendOrders(record);
         safeNotify(() -> notify.notifyKistaSuccess(record, result.id()));
         return result;
     }
@@ -61,15 +59,15 @@ public class TradingRecordService implements ProcessTradingRecordUseCase, Proces
         var record = TradingRecord.of(post, order);
         sheet.update(record);
         notify.notify(record);
-        kista.ifPresent(k -> {
-            try {
-                var result = k.sendOrders(record);
-                safeNotify(() -> notify.notifyKistaSuccess(record, result.id()));
-            } catch (Exception e) {
-                log.warn("KISTA 전송 실패 (무시): {}", e.getMessage());
-                safeNotify(() -> notify.notifyKistaFailure(record, e));
-            }
-        });
+
+        // KISTA 실패는 sheet/notify에 영향 없음 — 실패 알림만 전송
+        try {
+            var result = kista.sendOrders(record);
+            safeNotify(() -> notify.notifyKistaSuccess(record, result.id()));
+        } catch (Exception e) {
+            log.warn("KISTA 전송 실패 (무시): {}", e.getMessage());
+            safeNotify(() -> notify.notifyKistaFailure(record, e));
+        }
     }
 
     private void safeNotify(Runnable action) {

@@ -19,7 +19,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -49,7 +48,8 @@ class TradingRecordServiceTest {
     void process_executes_full_pipeline_in_order() {
         when(scraperPort.scrape()).thenReturn(samplePost);
         when(ocrPort.analyze(samplePost.images())).thenReturn(sampleOrder);
-        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, Optional.empty());
+        when(kistaPort.sendOrders(any())).thenReturn(sampleKistaResult);
+        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, kistaPort);
 
         service.process();
 
@@ -65,7 +65,8 @@ class TradingRecordServiceTest {
     void process_passes_correct_tradingRecord_to_sheet_and_notify() {
         when(scraperPort.scrape()).thenReturn(samplePost);
         when(ocrPort.analyze(any())).thenReturn(sampleOrder);
-        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, Optional.empty());
+        when(kistaPort.sendOrders(any())).thenReturn(sampleKistaResult);
+        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, kistaPort);
 
         service.process();
 
@@ -80,23 +81,11 @@ class TradingRecordServiceTest {
     void process_calls_kista_when_present() {
         when(scraperPort.scrape()).thenReturn(samplePost);
         when(ocrPort.analyze(any())).thenReturn(sampleOrder);
-        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, Optional.of(kistaPort));
+        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, kistaPort);
 
         service.process();
 
         verify(kistaPort).sendOrders(any(TradingRecord.class));
-    }
-
-    @Test
-    @DisplayName("KistaPort가 없으면 KISTA 호출을 건너뛴다")
-    void process_skips_kista_when_absent() {
-        when(scraperPort.scrape()).thenReturn(samplePost);
-        when(ocrPort.analyze(any())).thenReturn(sampleOrder);
-        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, Optional.empty());
-
-        service.process();
-
-        verifyNoInteractions(kistaPort);
     }
 
     @Test
@@ -105,7 +94,7 @@ class TradingRecordServiceTest {
         when(scraperPort.scrape()).thenReturn(samplePost);
         when(ocrPort.analyze(any())).thenReturn(sampleOrder);
         doThrow(new RuntimeException("KISTA 연결 오류")).when(kistaPort).sendOrders(any());
-        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, Optional.of(kistaPort));
+        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, kistaPort);
 
         service.process(); // 예외 전파 없이 완료
 
@@ -119,7 +108,7 @@ class TradingRecordServiceTest {
         when(scraperPort.scrape()).thenReturn(samplePost);
         when(ocrPort.analyze(any())).thenReturn(sampleOrder);
         when(kistaPort.sendOrders(any())).thenReturn(sampleKistaResult);
-        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, Optional.of(kistaPort));
+        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, kistaPort);
 
         service.process();
 
@@ -133,7 +122,7 @@ class TradingRecordServiceTest {
         when(ocrPort.analyze(any())).thenReturn(sampleOrder);
         var cause = new RuntimeException("KISTA 연결 오류");
         doThrow(cause).when(kistaPort).sendOrders(any());
-        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, Optional.of(kistaPort));
+        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, kistaPort);
 
         service.process();
 
@@ -149,7 +138,7 @@ class TradingRecordServiceTest {
         when(ocrPort.analyze(any())).thenReturn(sampleOrder);
         when(kistaPort.sendOrders(any())).thenReturn(sampleKistaResult);
         doThrow(new RuntimeException("알림 실패")).when(notifyPort).notifyKistaSuccess(any(), any());
-        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, Optional.of(kistaPort));
+        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, kistaPort);
 
         service.process(); // 알림 실패해도 예외 전파 없이 완료
 
@@ -163,7 +152,7 @@ class TradingRecordServiceTest {
         when(scraperPort.scrape()).thenReturn(samplePost);
         when(ocrPort.analyze(any())).thenReturn(sampleOrder);
         doThrow(new RuntimeException("KISTA 오류")).when(kistaPort).sendOrders(any());
-        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, Optional.of(kistaPort));
+        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, kistaPort);
 
         service.process();
 
@@ -179,7 +168,7 @@ class TradingRecordServiceTest {
         var date = LocalDate.of(2026, 6, 13);
         when(ocrPort.analyze(anyList())).thenReturn(sampleOrder);
         when(kistaPort.sendOrders(any())).thenReturn(sampleKistaResult);
-        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, Optional.of(kistaPort));
+        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, kistaPort);
 
         service.process(image, date);
 
@@ -190,24 +179,12 @@ class TradingRecordServiceTest {
     }
 
     @Test
-    @DisplayName("process(images, date)는 KISTA 없을 때 IllegalStateException을 던진다")
-    void processImages_throws_when_kista_absent() {
-        var image = new byte[]{1, 2, 3};
-        var date = LocalDate.of(2026, 6, 13);
-        when(ocrPort.analyze(anyList())).thenReturn(sampleOrder);
-        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, Optional.empty());
-
-        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
-                () -> service.process(image, date));
-    }
-
-    @Test
     @DisplayName("process(images, date)가 KISTA에 전달하는 TradingRecord는 제공된 날짜와 수동 분석 제목을 가진다")
     void processImages_tradingRecord_has_provided_date_and_manual_title() {
         var date = LocalDate.of(2026, 6, 13);
         when(ocrPort.analyze(any())).thenReturn(sampleOrder);
         when(kistaPort.sendOrders(any())).thenReturn(sampleKistaResult);
-        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, Optional.of(kistaPort));
+        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, kistaPort);
 
         service.process(new byte[]{1}, date);
 

@@ -6,17 +6,23 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fida.common.CommaBigDecimalDeserializer;
 import com.fida.domain.model.OrderItem;
 import com.fida.domain.model.ParsedOrder;
+import com.fida.domain.port.out.NotifyPort;
 import com.fida.domain.port.out.OcrPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -36,49 +42,165 @@ public class GeminiVisionAdapter implements OcrPort {
                     "{\n" +
                     "  \"buy\": [{\"price\": 매수가격, \"qty\": 매수수량}],\n" +
                     "  \"sell\": [{\"price\": 매도가격, \"qty\": 매도수량}],\n" +
+                    "  \"sell_rows\": [{\"price\": 매도표행가격, \"qty\": 매도표행수량}],\n" +
                     "  \"current_cycle_start\": 현사이클시작,\n" +
+                    "  \"season_start_capital\": 시즌시작원금,\n" +
+                    "  \"capital_rows\": [{\"label\": 자금표라벨, \"value\": 자금표금액}],\n" +
+                    "  \"performance_rows\": [{\"label\": 성과표라벨, \"value\": 성과표금액}],\n" +
                     "  \"current_cycle_realized_pnl\": 현사이클실현수익,\n" +
                     "  \"avg_price\": 평단,\n" +
+                    "  \"holding_qty\": 보유개수후보,\n" +
+                    "  \"cumulative_qty\": 누적개수후보,\n" +
+                    "  \"buy_qty\": 매수개수후보,\n" +
                     "  \"holdings\": 보유개수\n" +
                     "}\n\n" +
                     "[테이블 구조 규칙]\n" +
                     "- 이미지에 \"Limit Vwap\" 블록이 두 개 있음\n" +
                     "- 첫 번째 블록 헤더가 \"매수가\"이면 → buy 배열에 입력 (최대 3행)\n" +
                     "- 두 번째 블록 헤더가 \"매도가\"이면 → sell 배열에 입력 (최대 3행)\n" +
-                    "- 각 섹션 내 행의 가격이나 수량이 \"-\"이면 해당 항목은 null\n\n" +
+                    "- sell_rows는 왼쪽 매도가 표의 물리적 3개 행을 위에서부터 순서대로 반드시 모두 입력. 빈 행도 생략하지 말고 {\"price\": null, \"qty\": null}로 입력해 배열 길이를 정확히 3으로 유지\n" +
+                    "- 각 섹션 내 행의 가격이나 수량이 \"-\"이면 해당 항목은 null\n" +
+                    "- 섹션 내 빈 행(가격·수량 모두 \"-\")은 건너뜀. 값이 있는 행은 위치(첫째·둘째·셋째)에 무관하게 반드시 포함\n" +
+                    "  예: 매도가 섹션이 [-/-, -/-, 236.54/남은전부]이면 → sell: [{\"price\": 236.54, \"qty\": \"ALL\"}]\n" +
+                    "- sell 배열: 반드시 왼쪽 \"매도가\" 헤더 아래 두 열(매도가격·개수)만 사용. 오른쪽 성과 섹션의 \"종가\"/\"평단\"/실현수익 등 숫자는 절대 포함 금지. 매도가·개수 모두 비어있으면 sell: []\n\n" +
                     "[값 추출 규칙]\n" +
                     "- buy/sell 최대 3건\n" +
                     "- 데이터 없거나 \"-\"이면 null\n" +
                     "- \"남은전부\"/\"전부\"/\"ALL\"은 \"ALL\"\n" +
                     "- 달러기호($)/콤마(,) 제거하고 숫자만, 소수점 유지\n" +
                     "- current_cycle_start: 이미지에서 정확히 \"현사이클 시작 $\" 라벨인 행의 값만 사용. 근처에 \"XXXX 시작원금 $\"(연도+시작원금) 라벨의 행이 별도로 있으며 값이 다름 — 해당 행은 사용 금지. 날짜가 아닌 금액임.\n" +
-                    "- current_cycle_realized_pnl: 이미지에서 \"현사이클 실현수익 $\" 항목의 값. 음수일 수도 있음.\n" +
+                    "- season_start_capital: 이미지에서 \"XXXX 시작원금 $\"(연도 또는 시즌N+시작원금) 라벨 행의 값. current_cycle_start와 혼동 검증용이므로 별도로 기록. 없으면 null\n" +
+                    "- capital_rows: 오른쪽 상단 자금 표의 라벨/금액 행을 보이는 그대로 모두 기록. 예: [{\"label\":\"시즌1 시작원금\",\"value\":10000.00},{\"label\":\"현사이클 시작\",\"value\":11783.18},{\"label\":\"잔금\",\"value\":8283.77}]\n" +
+                    "- performance_rows: 오른쪽 성과 표(종가·평단·현사이클 실현수익·시즌N 실현수익·시즌N 실현수익률)의 라벨/값 행을 보이는 그대로 모두 기록. 값이 0.00이어도 그대로 기록(생략 금지). 예: [{\"label\":\"종가\",\"value\":65.23},{\"label\":\"평단\",\"value\":64.684},{\"label\":\"현사이클 실현수익\",\"value\":0.00},{\"label\":\"시즌2 실현수익\",\"value\":1431.10},{\"label\":\"시즌2 실현수익률\",\"value\":14.31}]\n" +
+                    "- current_cycle_realized_pnl: performance_rows와 별개로 이미지에서 정확히 \"현사이클 실현수익 $\" 라벨 행의 값만 사용(참고용 필드, performance_rows가 신뢰 소스). 바로 아래 \"2026 실현수익 $\"(연간 누적)·\"연간 실현수익 $\"·\"시즌N 실현수익 $\"·\"시즌N 실현수익률\" 등 다른 실현수익/수익률 항목은 절대 사용 금지. 값이 0.00이어도 그대로 사용. 음수일 수도 있음.\n" +
                     "- avg_price: 이미지 오른쪽 \"평단\" 라벨 옆 셀 값만 사용. 비어있거나 보유개수가 0이면 null. 종가/현재가 등 다른 가격 사용 금지\n" +
-                    "- holdings: 이미지 하단 \"보유개수\" 라벨 옆 값 사용 (\"매수개수\" 사용 금지). 반드시 0 이상의 정수이며 음수가 될 수 없음. 음수로 보이면 0으로 반환";
+                    "- holding_qty: 이미지에 정확히 \"보유개수\" 라벨이 보일 때만 그 값을 기록. 라벨이 없으면 반드시 null. \"매수개수\" 값을 복사하지 말 것\n" +
+                    "- cumulative_qty: 이미지 하단 왼쪽 표에서 \"누적개수\" 라벨 행의 값(양수 정수). 오른쪽 \"N 배수 예시\" 섹션에도 누적개수가 표시되는 경우가 있으나 그 섹션은 무시. 없으면 null\n" +
+                    "- buy_qty: 이미지 하단 왼쪽 표에서 \"매수개수\" 라벨 행의 값. 음수일 수 있음. 없으면 null\n" +
+                    "- holdings: 최종 보유 수량. 하단 왼쪽 표의 \"누적개수\" 값을 우선 사용하고, 누적개수가 없을 때만 \"보유개수\" 값 사용. \"매수개수\" 사용 금지(매수개수는 음수일 수 있어 혼동 주의). 반드시 0 이상의 정수";
+
+    // current_cycle_start가 (잔금+보유평가액) 대비 이 배율을 벗어나면 OCR 오판독으로 의심
+    private static final BigDecimal CURRENT_CYCLE_START_RATIO_MAX = new BigDecimal("5");
+    private static final BigDecimal CURRENT_CYCLE_START_RATIO_MIN = new BigDecimal("0.2");
+
+    private static final int MAX_RETRIES = 3;
+    // 테스트에서 ReflectionTestUtils로 0으로 설정 가능
+    long retryDelayMs = 60_000L;
 
     private static final Pattern JSON_FENCE = Pattern.compile("```(?:json)?\\s*([\\s\\S]*?)```");
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     private final RestTemplate restTemplate;
+    private final NotifyPort notifyPort;
+    private final GeminiQuotaTracker quotaTracker;
     @Value("${gemini.api-key}")
     private String apiKey;
 
     @Override
     public ParsedOrder analyze(List<byte[]> images) {
+        // Gemini 400 "Unable to process input image" 진단용 — 실제 전송 바이트 크기·헤더 확인
+        logImageDiagnostics(images);
         Object requestBody = buildRequest(images);
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         var entity = new HttpEntity<>(requestBody, headers);
 
-        GeminiResponse response = restTemplate.postForObject(ENDPOINT, entity, GeminiResponse.class, apiKey);
-
-        String text = extractText(response);
-        if (text == null || text.isBlank()) {
-            throw new OcrException("Gemini 응답 텍스트 없음");
+        Exception lastException = null;
+        for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                GeminiResponse response = restTemplate.postForObject(ENDPOINT, entity, GeminiResponse.class, apiKey);
+                notifyGeminiQuota();
+                String text = extractText(response);
+                if (text == null || text.isBlank()) {
+                    OcrException e = new OcrException("Gemini 응답 텍스트 없음");
+                    safeNotifyGeminiError(e);
+                    throw e;
+                }
+                return parseOrderJson(text);
+            } catch (OcrException e) {
+                // 파싱 오류는 재시도 없이 즉시 rethrow (알림은 위에서 처리)
+                throw e;
+            } catch (HttpClientErrorException.TooManyRequests e) {
+                notifyGeminiQuota();
+                // Gemini 무료 티어 일일 요청 한도 초과 — 네트워크 장애가 아니므로 원인을 명확히 노출
+                log.warn("Gemini API 일일한도 초과 (429): {}", e.getResponseBodyAsString());
+                safeNotifyGeminiError(e);
+                throw new OcrException("Gemini API 일일한도 초과", e);
+            } catch (HttpServerErrorException e) {
+                notifyGeminiQuota();
+                if (e.getStatusCode() == HttpStatus.SERVICE_UNAVAILABLE) {
+                    // 503: 재시도 대상
+                    lastException = e;
+                    log.warn("Gemini API 503 오류 (시도 {}/{}), {}초 후 재시도", attempt, MAX_RETRIES, retryDelayMs / 1000);
+                    if (attempt < MAX_RETRIES) {
+                        sleepQuietly(retryDelayMs);
+                    }
+                } else {
+                    // 503 외 서버 오류: 즉시 알림 후 실패
+                    log.error("Gemini API 오류 ({})", e.getStatusCode(), e);
+                    safeNotifyGeminiError(e);
+                    throw new OcrException("Gemini API 오류: " + e.getStatusCode(), e);
+                }
+            } catch (RestClientException e) {
+                notifyGeminiQuota();
+                // 네트워크 등 통신 오류: 즉시 알림 후 실패
+                log.error("Gemini API 통신 오류", e);
+                safeNotifyGeminiError(e);
+                throw new OcrException("Gemini API 통신 오류", e);
+            }
         }
 
-        return parseOrderJson(text);
+        // 3회 재시도 모두 실패
+        log.error("Gemini API 503 오류 {}회 재시도 후 최종 실패", MAX_RETRIES, lastException);
+        safeNotifyGeminiError(lastException);
+        throw new OcrException("Gemini API 503 오류 " + MAX_RETRIES + "회 재시도 후 실패", lastException);
+    }
+
+    private void logImageDiagnostics(List<byte[]> images) {
+        for (int i = 0; i < images.size(); i++) {
+            byte[] img = images.get(i);
+            int headerLen = Math.min(img.length, 12);
+            StringBuilder hex = new StringBuilder();
+            for (int b = 0; b < headerLen; b++) {
+                hex.append(String.format("%02X ", img[b]));
+            }
+            log.info("Gemini 이미지 진단 [{}/{}] bytes={} header={}mime={}",
+                    i + 1, images.size(), img.length, hex, detectMimeType(img));
+        }
+    }
+
+    private void notifyGeminiQuota() {
+        try {
+            GeminiQuotaTracker.QuotaStatus status = quotaTracker.recordRequest();
+            notifyPort.notifyGeminiQuota(status.remaining(), status.limit());
+        } catch (Exception e) {
+            log.warn("Gemini 일일한도 알림 실패: {}", e.getMessage());
+        }
+    }
+
+    private void safeNotifyGeminiError(Exception cause) {
+        try {
+            notifyPort.notifyGeminiError(cause);
+        } catch (Exception e) {
+            log.warn("Gemini 오류 알림 실패: {}", e.getMessage());
+        }
+    }
+
+    private void safeNotifyOcrWarning(String warning) {
+        try {
+            notifyPort.notifyOcrWarning(warning);
+        } catch (Exception e) {
+            log.warn("OCR 경고 알림 실패: {}", e.getMessage());
+        }
+    }
+
+    private void sleepQuietly(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private Object buildRequest(List<byte[]> images) {
@@ -86,11 +208,32 @@ public class GeminiVisionAdapter implements OcrPort {
         parts.add(Map.of("text", PROMPT));
         for (byte[] img : images) {
             parts.add(Map.of("inline_data", Map.of(
-                    "mime_type", "image/png",
+                    "mime_type", detectMimeType(img),
                     "data", Base64.getEncoder().encodeToString(img)
             )));
         }
-        return Map.of("contents", List.of(Map.of("parts", parts)));
+        // temperature 0: 동일 이미지 재요청 시 결과가 달라지는 비결정적 응답 방지
+        return Map.of(
+                "contents", List.of(Map.of("parts", parts)),
+                "generationConfig", Map.of("temperature", 0)
+        );
+    }
+
+    // /orders/from-image는 업로드 파일 포맷을 검증하지 않으므로, 매직바이트로 실제 포맷을 감지해
+    // Gemini에 잘못된 mime_type(예: JPEG를 image/png로 표기)을 보내 400 오류가 나는 것을 방지
+    private String detectMimeType(byte[] img) {
+        if (img.length >= 3 && (img[0] & 0xFF) == 0xFF && (img[1] & 0xFF) == 0xD8 && (img[2] & 0xFF) == 0xFF) {
+            return "image/jpeg";
+        }
+        if (img.length >= 6 && img[0] == 'G' && img[1] == 'I' && img[2] == 'F' && img[3] == '8') {
+            return "image/gif";
+        }
+        if (img.length >= 12 && img[0] == 'R' && img[1] == 'I' && img[2] == 'F' && img[3] == 'F'
+                && img[8] == 'W' && img[9] == 'E' && img[10] == 'B' && img[11] == 'P') {
+            return "image/webp";
+        }
+        // PNG 시그니처 및 그 외(테스트 더미 바이트 등)는 기존 동작 유지 위해 기본값 image/png
+        return "image/png";
     }
 
     private String extractText(GeminiResponse response) {
@@ -114,16 +257,37 @@ public class GeminiVisionAdapter implements OcrPort {
         }
         // unquoted 숫자 뒤 한글 제거: "holdings": 7년 → "holdings": 7
         jsonStr = KOREAN_IN_NUMBER.matcher(jsonStr).replaceAll("$1");
+        // current_cycle_start 조용한 null 처리(날짜 문자열 등 숫자 변환 실패) 원인 진단용
+        log.info("Gemini 원문 JSON 응답: {}", jsonStr);
         try {
             GeminiOrderResult raw = objectMapper.readValue(jsonStr, GeminiOrderResult.class);
             log.info(raw.toString());
 
-            int holdings = raw.holdings() != null ? Math.max(0, raw.holdings()) : 0;
+            int holdings = resolveHoldings(raw);
+            BigDecimal currentCycleStart = resolveCurrentCycleStart(raw);
             BigDecimal avgPrice = (holdings == 0) ? null : raw.avgPrice();
             List<OrderItem> buyOrders = toOrderItems(raw.buy());
-            List<OrderItem> sellOrders = toOrderItems(raw.sell());
+            List<OrderItem> sellOrders = resolveSellOrders(raw);
+            // sell이 비어있으면 Gemini가 매도 주문을 누락했을 가능성 — 로그로 원인 추적
+            if (sellOrders.isEmpty()) {
+                log.warn("Gemini sell 파싱 결과 비어있음 — 원시 sell 데이터: {}", raw.sell());
+            }
+            // holdings=0 & sell 존재 시 OCR 오파싱 가능성 — 원문 로그로 추적
+            if (holdings == 0 && !sellOrders.isEmpty()) {
+                log.warn("holdings=0 인데 SELL 주문 존재 — 원문 Gemini 응답:\n{}", text);
+            }
+            // "현사이클 시작"과 "시즌 시작원금" 행을 혼동한 운영 사례 재발 감지 — 로그 + 텔레그램 경고
+            if (currentCycleStart != null && raw.seasonStartCapital() != null
+                    && currentCycleStart.compareTo(raw.seasonStartCapital()) == 0) {
+                String warning = "current_cycle_start가 season_start_capital과 동일함(" + currentCycleStart
+                        + ") — \"현사이클 시작\"/\"시즌 시작원금\" 혼동 파싱 가능성, 시트·KISTA 값 확인 필요";
+                log.warn(warning);
+                safeNotifyOcrWarning(warning);
+            }
+            // 운영 사례(2026-07-30): 이미지 숫자 자체를 오판독해 현사이클 시작이 실제보다 10배 가까이 크게 나온 사례 재발 감지
+            checkCurrentCycleStartPlausibility(raw, currentCycleStart, holdings, avgPrice);
 
-            return new ParsedOrder(buyOrders, sellOrders, raw.currentCycleStart(), raw.currentCycleRealizedPnl(), avgPrice, holdings);
+            return new ParsedOrder(buyOrders, sellOrders, currentCycleStart, resolveCurrentCycleRealizedPnl(raw), avgPrice, holdings);
         } catch (Exception e) {
             log.error("Gemini JSON 파싱 실패 — 원문 응답:\n{}", text, e);
             throw new OcrException("Gemini JSON 파싱 실패: " + text.substring(0, Math.min(300, text.length())), e);
@@ -136,6 +300,128 @@ public class GeminiVisionAdapter implements OcrPort {
                 .filter(i -> i.price() != null || i.qty() != null)
                 .map(i -> new OrderItem(i.price(), i.qty() != null ? String.valueOf(i.qty()) : null))
                 .toList();
+    }
+
+    private List<OrderItem> resolveSellOrders(GeminiOrderResult raw) {
+        List<OrderItem> sellOrders = toOrderItems(raw.sell());
+        List<OrderItem> sellRows = toOrderItems(raw.sellRows());
+
+        // 운영 사례(2026-05-28): sell이 비어있지 않아도 일부 유효 행만 담고 다른 행을 누락시킬 수 있음 —
+        // 물리적 3행을 보존하는 sell_rows의 유효 행 수가 sell보다 많으면(전체/부분 누락) sell_rows를 신뢰한다.
+        if (sellRows.size() <= sellOrders.size()) {
+            return sellOrders;
+        }
+        String warning = sellOrders.isEmpty()
+                ? "Gemini sell 누락을 sell_rows에서 복구: " + sellRows
+                : "Gemini sell 부분 누락 감지(sell=" + sellOrders + ", sell_rows=" + sellRows + ") — sell_rows 전체를 사용";
+        log.warn(warning);
+        safeNotifyOcrWarning(warning);
+        return sellRows;
+    }
+
+    private int resolveHoldings(GeminiOrderResult raw) {
+        // 이미지의 명시적 누적개수를 우선해 매수개수를 holding_qty로 오인식한 결과를 차단한다.
+        if (isPositive(raw.cumulativeQty())) {
+            if (isPositive(raw.holdingQty()) && !raw.cumulativeQty().equals(raw.holdingQty())) {
+                String warning = "OCR 수량 불일치: holding_qty=" + raw.holdingQty()
+                        + ", cumulative_qty=" + raw.cumulativeQty()
+                        + " — 누적개수를 최종 보유수량으로 사용";
+                log.warn(warning);
+                safeNotifyOcrWarning(warning);
+            }
+            return raw.cumulativeQty();
+        }
+        if (isPositive(raw.holdingQty())) {
+            return raw.holdingQty();
+        }
+        if (raw.holdings() != null) {
+            return Math.max(0, raw.holdings());
+        }
+        return 0;
+    }
+
+    private BigDecimal resolveCurrentCycleStart(GeminiOrderResult raw) {
+        // 모델이 전용 필드만 null로 반환한 경우 오른쪽 상단 자금 표의 정확한 라벨 행으로 보정한다.
+        if (raw.currentCycleStart() != null) {
+            return raw.currentCycleStart();
+        }
+        if (raw.capitalRows() == null) {
+            return null;
+        }
+        return raw.capitalRows().stream()
+                .filter(row -> row.label() != null && row.label().replaceAll("\\s+", "").contains("현사이클시작"))
+                .map(CapitalRow::value)
+                .filter(value -> value != null && value.compareTo(BigDecimal.ZERO) > 0)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private void checkCurrentCycleStartPlausibility(GeminiOrderResult raw, BigDecimal currentCycleStart,
+                                                      int holdings, BigDecimal avgPrice) {
+        if (currentCycleStart == null) {
+            return;
+        }
+        BigDecimal cashBalance = findCapitalRowValue(raw, "잔금");
+        if (cashBalance == null) {
+            return;
+        }
+        // 보유 평가액 = 평단 x 보유수량 (보유 없으면 0)
+        BigDecimal holdingsValue = avgPrice != null ? avgPrice.multiply(BigDecimal.valueOf(holdings)) : BigDecimal.ZERO;
+        BigDecimal expected = cashBalance.add(holdingsValue);
+        if (expected.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+        BigDecimal ratio = currentCycleStart.divide(expected, 4, RoundingMode.HALF_UP);
+        if (ratio.compareTo(CURRENT_CYCLE_START_RATIO_MAX) > 0 || ratio.compareTo(CURRENT_CYCLE_START_RATIO_MIN) < 0) {
+            String warning = "OCR current_cycle_start 이상치 의심: current_cycle_start=" + currentCycleStart
+                    + ", 잔금+보유평가액 추정치=" + expected + " (비율=" + ratio + ") — 이미지 오판독 가능성, 시트·KISTA 값 확인 필요";
+            log.warn(warning);
+            safeNotifyOcrWarning(warning);
+        }
+    }
+
+    private BigDecimal findCapitalRowValue(GeminiOrderResult raw, String normalizedLabel) {
+        if (raw.capitalRows() == null) {
+            return null;
+        }
+        return raw.capitalRows().stream()
+                .filter(row -> row.label() != null && row.label().replaceAll("\\s+", "").contains(normalizedLabel))
+                .map(CapitalRow::value)
+                .filter(java.util.Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private BigDecimal resolveCurrentCycleRealizedPnl(GeminiOrderResult raw) {
+        // 모델이 인접한 "시즌N 실현수익" 행과 혼동해 current_cycle_realized_pnl을 잘못 채우는 사례가 있어,
+        // 라벨로 구분되는 performance_rows를 우선 신뢰하고 직접 필드는 라벨 매칭 실패 시 폴백으로만 사용한다.
+        BigDecimal fromRows = findPerformanceRowValue(raw, "현사이클실현수익");
+        if (fromRows == null) {
+            return raw.currentCycleRealizedPnl();
+        }
+        if (raw.currentCycleRealizedPnl() != null && fromRows.compareTo(raw.currentCycleRealizedPnl()) != 0) {
+            String warning = "OCR 실현수익 불일치: current_cycle_realized_pnl=" + raw.currentCycleRealizedPnl()
+                    + ", performance_rows 기준=" + fromRows + " — \"현사이클 실현수익\"/\"시즌N 실현수익\" 혼동 가능성, performance_rows 값 사용";
+            log.warn(warning);
+            safeNotifyOcrWarning(warning);
+        }
+        return fromRows;
+    }
+
+    private BigDecimal findPerformanceRowValue(GeminiOrderResult raw, String normalizedLabel) {
+        if (raw.performanceRows() == null) {
+            return null;
+        }
+        return raw.performanceRows().stream()
+                .filter(row -> row.label() != null && row.label().replaceAll("\\s+", "").contains(normalizedLabel))
+                .map(CapitalRow::value)
+                .filter(java.util.Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private boolean isPositive(Integer value) {
+        return value != null && value > 0;
     }
 
     // ── Gemini API 응답 DTO ─────────────────────────────────────────
@@ -157,9 +443,22 @@ public class GeminiVisionAdapter implements OcrPort {
             List<RawOrderItem> buy,
             List<RawOrderItem> sell,
 
+            @com.fasterxml.jackson.annotation.JsonProperty("sell_rows")
+            List<RawOrderItem> sellRows,
+
             @com.fasterxml.jackson.annotation.JsonProperty("current_cycle_start")
             @JsonDeserialize(using = CommaBigDecimalDeserializer.class)
             BigDecimal currentCycleStart,
+
+            @com.fasterxml.jackson.annotation.JsonProperty("season_start_capital")
+            @JsonDeserialize(using = CommaBigDecimalDeserializer.class)
+            BigDecimal seasonStartCapital,
+
+            @com.fasterxml.jackson.annotation.JsonProperty("capital_rows")
+            List<CapitalRow> capitalRows,
+
+            @com.fasterxml.jackson.annotation.JsonProperty("performance_rows")
+            List<CapitalRow> performanceRows,
 
             @com.fasterxml.jackson.annotation.JsonProperty("current_cycle_realized_pnl")
             @JsonDeserialize(using = CommaBigDecimalDeserializer.class)
@@ -169,9 +468,23 @@ public class GeminiVisionAdapter implements OcrPort {
             @JsonDeserialize(using = CommaBigDecimalDeserializer.class)
             BigDecimal avgPrice,
 
+            @com.fasterxml.jackson.annotation.JsonProperty("holding_qty")
+            Integer holdingQty,
+
+            @com.fasterxml.jackson.annotation.JsonProperty("cumulative_qty")
+            Integer cumulativeQty,
+
+            @com.fasterxml.jackson.annotation.JsonProperty("buy_qty")
+            Integer buyQty,
+
             Integer holdings
     ) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record RawOrderItem(BigDecimal price, Object qty) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record CapitalRow(String label,
+                      @JsonDeserialize(using = CommaBigDecimalDeserializer.class)
+                      BigDecimal value) {}
 }

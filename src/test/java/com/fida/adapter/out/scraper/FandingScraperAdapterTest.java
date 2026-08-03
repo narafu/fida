@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -16,6 +17,7 @@ import java.util.Base64;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 
@@ -90,6 +92,23 @@ class FandingScraperAdapterTest {
     }
 
     @Test
+    @DisplayName("HTTP 500 응답 본문은 ScraperException 메시지에 포함된다")
+    void scrape_includes_server_error_body_in_exception_message() {
+        String body = """
+                {"success":false,"error":"Command failed","stdout":"{\\"success\\":false,\\"error\\":\\"로그인 실패\\"}","stderr":"trace"}
+                """;
+        mockServer.expect(requestTo(SCRAPER_URL))
+                .andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(body));
+
+        assertThatThrownBy(() -> adapter.scrape())
+                .isInstanceOf(ScraperException.class)
+                .hasMessageContaining("로그인 실패")
+                .hasMessageContaining("stderr");
+    }
+
+    @Test
     @DisplayName("제목에 M/D 패턴 있으면 postDate보다 제목 날짜를 우선한다")
     void scrape_prefers_title_date_over_postDate() {
         byte[] imageBytes = {10, 20, 30};
@@ -155,5 +174,22 @@ class FandingScraperAdapterTest {
         ScrapedPost result = adapter.scrape();
 
         assertThat(result.postDate()).isEqualTo(LocalDate.now());
+    }
+
+    @Test
+    @DisplayName("연초에 전년도 12월 게시글 제목을 처리하면 전년도 날짜로 해석한다")
+    void resolveDateFromTitle_interprets_far_future_as_previous_year() {
+        // 2027-01-01에 "12/31" 제목 처리 → 2027-12-31이 아닌 2026-12-31
+        var result = adapter.resolveDateFromTitle("Privacy 12/31 _ SOXL 매매기록", LocalDate.of(2027, 1, 1));
+
+        assertThat(result).isEqualTo(LocalDate.of(2026, 12, 31));
+    }
+
+    @Test
+    @DisplayName("제목 날짜가 오늘로부터 6개월 이내면 올해 날짜로 해석한다")
+    void resolveDateFromTitle_keeps_current_year_for_near_dates() {
+        var result = adapter.resolveDateFromTitle("Privacy 7/11 _ SOXL 매매기록", LocalDate.of(2026, 7, 10));
+
+        assertThat(result).isEqualTo(LocalDate.of(2026, 7, 11));
     }
 }

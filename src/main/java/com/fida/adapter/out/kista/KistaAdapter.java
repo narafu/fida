@@ -5,16 +5,13 @@ import com.fida.domain.model.TradingRecord;
 import com.fida.domain.port.out.KistaPort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.util.UriComponentsBuilder;
 
 @Component
-@ConditionalOnProperty("kista.url")
 @RequiredArgsConstructor
 public class KistaAdapter implements KistaPort {
 
@@ -33,27 +30,25 @@ public class KistaAdapter implements KistaPort {
     public KistaResult sendOrders(TradingRecord record) {
         var request = FidaOrderRequest.of(record, SYMBOL);
 
-        var targetUrl = UriComponentsBuilder.fromUriString(baseUrl)
-                .path(INTERNAL_ORDER_PATH)
-                .toUriString();
+        var targetUrl = baseUrl + INTERNAL_ORDER_PATH;
 
         var response = restTemplate.postForObject(targetUrl, createInternalRequestEntity(request), KistaOrderResponse.class);
         if (response == null) {
             throw new IllegalStateException("KISTA 응답이 null입니다");
         }
         validate(request, response);
-        return new KistaResult(response.id(), response.tradeDate(), response.ticker(),
+        return new KistaResult(response.id(), response.releaseDate(), response.ticker(),
                 response.currentCycleStart(), response.currentCycleRealizedPnl(),
                 response.avgPrice(), response.holdings(), response.orders());
     }
 
     private void validate(FidaOrderRequest req, KistaOrderResponse res) {
-        if (!req.tradeDate().equals(res.tradeDate())
+        if (!req.tradeDate().equals(res.releaseDate())
                 || req.holdings() != res.holdings()
                 || req.orders().size() != res.orders().size()) {
             throw new IllegalStateException(String.format(
                     "KISTA 응답 불일치 — tradeDate: %s→%s, holdings: %d→%d, orders: %d→%d",
-                    req.tradeDate(), res.tradeDate(),
+                    req.tradeDate(), res.releaseDate(),
                     req.holdings(), res.holdings(),
                     req.orders().size(), res.orders().size()
             ));

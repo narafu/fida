@@ -34,3 +34,5 @@ services:
         sync: false
       - key: SCRAPER_URL
         sync: false
+      - key: KISTA_URL
+        value: https://api.kista-app.com

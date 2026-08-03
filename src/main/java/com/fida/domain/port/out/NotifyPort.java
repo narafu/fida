@@ -10,4 +10,16 @@ public interface NotifyPort {
     void notifyKistaSuccess(TradingRecord record, UUID savedId);
 
     void notifyKistaFailure(TradingRecord record, Exception cause);
+
+    // Gemini API 오류 알림 (재시도 소진 또는 비-503 오류)
+    void notifyGeminiError(Exception cause);
+
+    // 전체 실행 실패 알림 (스크래핑·시트·OCR 등 최상위 예외)
+    void notifyApplicationFailure(String stage, Exception cause);
+
+    // OCR 파싱 결과 의심 시 경고 알림 (전송은 차단하지 않음)
+    void notifyOcrWarning(String warning);
+
+    // Gemini API 일일한도 알림
+    void notifyGeminiQuota(int remaining, int limit);
 }
