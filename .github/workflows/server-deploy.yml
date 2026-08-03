@@ -160,6 +160,8 @@ jobs:
             export FIDA_IMAGE PLAYWRIGHT_SERVER_IMAGE
             docker compose pull
             docker compose up -d --no-deps fida playwright-server
+            # caddy는 이미지 태그가 고정(caddy:2.9-alpine)이라 재생성되지 않고, 없으면 최초 생성됨 — 최초 배포 시 caddy가 영원히 안 뜨는 문제 방지
+            docker compose up -d caddy
           ENDSSH
 
       - name: Health gate & auto-rollback

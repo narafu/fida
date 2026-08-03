@@ -84,9 +84,11 @@ GEMINI_QUOTA_USAGE_PATH=/state/gemini-quota-usage.json
 1. `main` push → 테스트
 2. arm64 이미지 2개(`fida`, `playwright-server`) 빌드 → GHCR push
 3. fida 자체 스케줄 실행창(화~토 06:50~07:30 KST) 회피 후 SSH 배포
-4. `docker compose pull && docker compose up -d --no-deps fida playwright-server` — routine 배포가 caddy를 건드리지 않는 kista-api와 동일한 blast-radius 격리 원칙
+4. `docker compose pull && docker compose up -d --no-deps fida playwright-server` — routine 배포가 caddy를 건드리지 않는 kista-api와 동일한 blast-radius 격리 원칙. `docker compose up -d caddy`도 이어서 실행(이미지 태그 고정이라 기존 캐디는 무변경, 최초 배포 시에만 실제로 생성됨)
 5. 헬스 게이트(최대 5분)
 6. 실패 시 자동 롤백
+
+**최초 배포 후 수동 스모크 권장**: `playwright-server/Dockerfile`이 Puppeteer 번들 Chrome 대신 시스템 Chromium(apt 설치, arm64 지원)을 쓰도록 전환됐다 — 번들 Chrome-for-Testing과 버전이 다르므로, 첫 배포 직후 실제 스크래핑 1회(수동 `workflow_dispatch` 또는 서버에서 직접 트리거)로 정상 동작을 확인할 것.
 
 ## 롤백 Runbook
 

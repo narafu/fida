@@ -36,7 +36,8 @@ services:
   caddy:
     image: caddy:2.9-alpine   # 버전 핀 — 무빙 태그 방지
     container_name: fida-caddy
-    env_file: .env
+    environment:
+      FIDA_DOMAIN: ${FIDA_DOMAIN}   # env_file(.env 전체 주입) 대신 필요한 값만 — GEMINI_API_KEY 등 secret이 리버스 프록시 컨테이너에 노출되지 않도록
     ports:
       - "80:80"
       - "443:443"
