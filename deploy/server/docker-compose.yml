@@ -1,0 +1,39 @@
+services:
+  fida:
+    image: ${FIDA_IMAGE:?FIDA_IMAGE is required}
+    container_name: fida
+    env_file: .env
+    volumes:
+      - ./secrets:/secrets:ro
+      - ./.fida-state:/state
+    depends_on:
+      playwright-server:
+        condition: service_healthy
+    networks: [default, shared_net]
+    expose: ["7070"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:7070/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  playwright-server:
+    image: ${PLAYWRIGHT_SERVER_IMAGE:?PLAYWRIGHT_SERVER_IMAGE is required}
+    container_name: fida-playwright-server
+    environment:
+      FANDING_EMAIL: ${FANDING_EMAIL}
+      FANDING_PASSWORD: ${FANDING_PASSWORD}
+    security_opt:
+      - seccomp:unconfined  # Chromium needs syscalls blocked by Docker default seccomp profile
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+networks:
+  shared_net:
+    external: true   # kista-api Caddy가 fida:7070으로 reverse_proxy 하기 위한 결합점
