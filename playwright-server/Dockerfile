@@ -6,9 +6,10 @@ RUN apt-get update && apt-get install -y \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-# PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false: puppeteer downloads its own Chrome for Testing
-# Do NOT set PUPPETEER_EXECUTABLE_PATH — use puppeteer bundled Chrome, not system Debian chromium
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false
+# Chrome for Testing(Puppeteer 기본 다운로드)은 Linux arm64 빌드를 제공하지 않는다
+# (https://github.com/puppeteer/puppeteer/issues/7740) — 시스템 Chromium을 직접 사용
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 WORKDIR /app
 

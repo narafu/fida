@@ -1,5 +1,5 @@
 # ── Stage 1: Build ─────────────────────────────────────────────────────────────
-FROM eclipse-temurin:21-jdk-alpine AS builder
+FROM --platform=$BUILDPLATFORM eclipse-temurin:21-jdk-alpine AS builder
 WORKDIR /workspace
 
 # Gradle Wrapper 및 의존성 레이어 캐싱 (소스 변경 없을 때 재사용)
