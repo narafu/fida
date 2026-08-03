@@ -54,9 +54,6 @@ docker compose build --no-cache <service>        # 소스 변경 후 캐시 의�
 docker run --rm -e KEY=val ... <image>           # 컨테이너 기동 오류 빠른 확인
 gh run list --repo narafu/fida --limit 5         # GitHub Actions 최근 실행 목록
 gh run view <run-id> --log-failed                # 실패 실행 로그 확인
-render services list -o text                     # Render 서비스 목록
-render deploys list srv-d8m9vqcm0tmc73ct17ug -o text  # fida 배포 목록
-render logs --resources srv-d8m9vqcm0tmc73ct17ug --limit 50 -o text  # fida 서비스 로그
 ```
 
 ## Architecture
@@ -80,7 +77,7 @@ playwright-server/    ← Node.js 사이드카 (Java로 이식 금지)
 
 ## Key Constraints
 
-- FIDA 서버 포트: 기본 **7070** (KISTA가 8080 사용 중). `server.port: ${PORT:7070}` — Render는 PORT 환경변수로 포트 지정(실제 10000), 로컬/Docker Compose는 기본값 7070 사용. Dockerfile `EXPOSE` 및 docker-compose.yml healthcheck URL은 7070 유지
+- FIDA 서버 포트: 기본 **7070** (KISTA가 8080 사용 중). `server.port: ${PORT:7070}` — 로컬/Docker Compose/OCI 서버 모두 기본값 7070 사용. Dockerfile `EXPOSE` 및 docker-compose.yml healthcheck URL은 7070 유지
 - DB 없음 (JPA/DataSource 추가 금지), RestTemplate 전용 (WebClient 금지)
 - Gemini 모델: `gemini-2.5-flash-lite` 고정
 - Gemini HTTP 429/`RESOURCE_EXHAUSTED`는 `OcrException("Gemini API 일일한도 초과")`로 분류 — 일반 `Gemini API 통신 오류`로 뭉개지 않음
@@ -104,12 +101,11 @@ playwright-server/    ← Node.js 사이드카 (Java로 이식 금지)
 
 - 소스 코드: **모든 구현 완료** (KistaAdapter, FidaOrderController 포함 12개 태스크 completed)
 - 구현 태스크는 shrimp-task-manager로 관리 중 (`list_tasks`로 확인)
-- **GitHub Actions Cron 전환 완료 및 검증 완료** — `.github/workflows/fida-schedule.yml` (UTC `0 21 * * 1-5` = KST 화~토 06:00; Render 스케줄러 07:00과 1시간 시차 이중화)
+- **OCI 상시 기동 서버로 이전 — 저장소 측 구현 완료, 서버 커트오버는 후속 수동 작업**: `.github/workflows/server-deploy.yml` 신설(main 브랜치 push 시 자동 배포, fida 자체 스케줄 실행 시간대(화~토 06:50~07:30 KST)에는 배포 차단, 헬스게이트+자동 롤백) + `deploy/server/docker-compose.yml` 신설. 배포 대상은 `/opt/fida/`(kista-api와 동일 OCI 서버), `FIDA_DOMAIN=fida.kista-app.com`. 서버 `.env`/`secrets/service-account.json` 실제 배치, GitHub Secrets(`SERVER_HOST`/`SERVER_USER`/`SERVER_SSH_KEY`/`SERVER_SSH_PORT`) 등록, kista-api 쪽 `shared_net`/Caddy 커트오버 반영은 아직 미완료
+- **정식 자동 실행 경로는 내부 `FandingScheduler`(OCI 상시 기동), GH Actions는 수동 재실행 전용** — `.github/workflows/fida-schedule.yml`은 cron 트리거를 제거하고 `workflow_dispatch` 수동 재실행 전용으로 축소 (Gemini quota 캐시 로직은 재처리 대비 유지)
 - GitHub Secrets 등록 시 service-account.json: `base64 -i <경로>/service-account.json | tr -d '\n'` → `GOOGLE_SERVICE_ACCOUNT_JSON_B64`로 등록
-- **Render 배포 완료** — `https://fida.onrender.com` (서비스 ID: `srv-d8m9vqcm0tmc73ct17ug`), GitHub Actions one-shot을 정식 실행 경로로 사용하므로 Render는 `FIDA_SCHEDULER_ENABLED=false` 설정 권장
-  - Render Secret Files: 대시보드 → fida 서비스 → Secret Files → 경로 `/secrets/service-account.json`
-  - UptimeRobot 헬스체크: `https://fida.onrender.com/actuator/health` (10분 간격, free tier 스핀다운 방지)
-- **정식 자동 실행 경로는 GitHub Actions one-shot** — Render 웹서비스는 수동 API/헬스체크 유지용이며, 무료 서버 메모리 제약으로 playwright-server를 함께 띄우지 않으므로 `FIDA_SCHEDULER_ENABLED=false`로 스케줄러 비활성화 권장
+- **healthchecks.io dead-man's switch 추가** — `HeartbeatPort`/`HeartbeatAdapter`가 `FandingScheduler.run()` 성공 직후 핑 전송(`HEARTBEAT_URL` 미설정 시 핑 생략, 실패는 로그만 남기고 삼킴). healthchecks.io 콘솔 체크 생성 및 화~토 07:00 KST 기준 예상 주기 등록은 후속 수동 작업
+- **Render 배포 완전 폐기** — `render.yaml` 삭제 완료, Render 서비스(`srv-d8m9vqcm0tmc73ct17ug`) 자체는 Render 대시보드에서 사용자가 직접 삭제해야 함 (후속 수동 작업)
 - KISTA 프로젝트: https://github.com/narafu/kista.git (별도 프로젝트, FIDA가 전송한 주문을 수신해 KIS API로 실행)
 - **KISTA 주문 전송 활성화됨** — `TradingRecordService.process()`: sheet 기록 → 매매 알림 → KISTA 전송 순서. KISTA 실패는 sheet/매매 알림에 영향 없음 (`safeNotify` 패턴)
 - **KISTA 전송 결과(성공/실패)는 별도 텔레그램 메시지로 알림** — 매매 알림과 독립된 2개의 메시지
@@ -128,7 +124,7 @@ playwright-server/    ← Node.js 사이드카 (Java로 이식 금지)
 ## Secrets
 
 - `./secrets/service-account.json` — 로컬 원본: `/Users/phs/secret/google-sheet-secret.json` 복사. 디렉토리가 비어 있으면 스케줄러 실행 시 `FileNotFoundException` 발생. `secrets/`는 `.gitignore`에 등록돼 있어 git에 올라가지 않음
-- Render Secret Files: 대시보드 → fida 서비스 → Secret Files → 경로 `/secrets/service-account.json`, 파일 내용 붙여넣기
+- 서버 배포본: `/opt/fida/secrets/service-account.json` — 서버에서 직접 배치 (GitHub Actions가 생성하지 않음, kista-api `.env`/secrets 패턴과 동일)
 
 ## Environment Variables
 
@@ -142,11 +138,11 @@ playwright-server/    ← Node.js 사이드카 (Java로 이식 금지)
 | `GOOGLE_SERVICE_ACCOUNT_JSON_PATH` | `/secrets/service-account.json` |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | 텔레그램 알림 |
 | `INTERNAL_API_TOKEN` | KISTA 내부 인증 토큰 (`X-Internal-Token` 헤더) |
-| `FIDA_SCHEDULER_ENABLED` | `false`이면 `!job` 프로필에서도 Render 내장 스케줄러 비활성화 (기본 `true`) |
+| `FIDA_SCHEDULER_ENABLED` | `false`이면 `!job` 프로필에서도 내장 `FandingScheduler` 비활성화 (기본 `true`) |
 | `GEMINI_QUOTA_USAGE_PATH` | Gemini 일일 사용량 파일 경로 (기본 `/tmp/fida-gemini-quota-usage.json`) — GH Actions는 `/state/...`로 지정해 cache로 영속화 |
-| `SCRAPER_URL` | 기본값 `http://playwright-server:3000/scrape` — 로컬/Docker Compose 설정 불필요. Render 배포 시 playwright-server URL로 대시보드에서 수동 설정 |
+| `SCRAPER_URL` | 기본값 `http://playwright-server:3000/scrape` — 로컬/Docker Compose/OCI 서버 모두 컨테이너 이름 기반 기본값 그대로 사용, 별도 설정 불필요 |
 | `KISTA_URL` | `application.yml` 기본값 `https://kista-api.fly.dev` — 변경 시에만 설정 |
-| `PORT` | Render가 자동 설정 (기본 fallback 7070) — 직접 설정 불필요 |
+| `HEARTBEAT_URL` | healthchecks.io dead-man's switch 핑 URL — 미설정 시 `HeartbeatAdapter`가 핑 생략 (기본값 빈 문자열) |
 
 ## Design Reference
 
