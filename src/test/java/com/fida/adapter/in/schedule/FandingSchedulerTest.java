@@ -1,6 +1,7 @@
 package com.fida.adapter.in.schedule;
 
 import com.fida.domain.port.in.ProcessTradingRecordUseCase;
+import com.fida.domain.port.out.HeartbeatPort;
 import com.fida.domain.port.out.NotifyPort;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -12,6 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 @DisplayName("FandingScheduler 테스트")
@@ -22,7 +24,7 @@ class FandingSchedulerTest {
     void run_delegates_to_use_case() {
         boolean[] called = {false};
         ProcessTradingRecordUseCase stub = () -> called[0] = true;
-        FandingScheduler scheduler = new FandingScheduler(stub, mock(NotifyPort.class));
+        FandingScheduler scheduler = new FandingScheduler(stub, mock(NotifyPort.class), mock(HeartbeatPort.class));
 
         scheduler.run();
 
@@ -30,17 +32,31 @@ class FandingSchedulerTest {
     }
 
     @Test
-    @DisplayName("run() 실패 시 Telegram 알림을 전송하고 예외를 삼킨다")
+    @DisplayName("run() 성공 시 heartbeatPort.ping()을 호출한다")
+    void run_pings_heartbeat_on_success() {
+        ProcessTradingRecordUseCase useCase = mock(ProcessTradingRecordUseCase.class);
+        HeartbeatPort heartbeatPort = mock(HeartbeatPort.class);
+        FandingScheduler scheduler = new FandingScheduler(useCase, mock(NotifyPort.class), heartbeatPort);
+
+        scheduler.run();
+
+        verify(heartbeatPort).ping();
+    }
+
+    @Test
+    @DisplayName("run() 실패 시 Telegram 알림을 전송하고 예외를 삼키며 heartbeatPort.ping()은 호출하지 않는다")
     void run_notifies_and_swallows_when_process_fails() {
         ProcessTradingRecordUseCase useCase = mock(ProcessTradingRecordUseCase.class);
         NotifyPort notifyPort = mock(NotifyPort.class);
+        HeartbeatPort heartbeatPort = mock(HeartbeatPort.class);
         RuntimeException cause = new RuntimeException("스크래핑 실패");
         doThrow(cause).when(useCase).process();
-        FandingScheduler scheduler = new FandingScheduler(useCase, notifyPort);
+        FandingScheduler scheduler = new FandingScheduler(useCase, notifyPort, heartbeatPort);
 
         scheduler.run();
 
         verify(notifyPort).notifyApplicationFailure(eq("FIDA scheduler"), eq(cause));
+        verify(heartbeatPort, never()).ping();
     }
 
     @Test

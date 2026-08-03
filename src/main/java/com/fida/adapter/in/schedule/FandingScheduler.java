@@ -1,6 +1,7 @@
 package com.fida.adapter.in.schedule;
 
 import com.fida.domain.port.in.ProcessTradingRecordUseCase;
+import com.fida.domain.port.out.HeartbeatPort;
 import com.fida.domain.port.out.NotifyPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,11 +19,13 @@ public class FandingScheduler {
 
     private final ProcessTradingRecordUseCase useCase;
     private final NotifyPort notifyPort;
+    private final HeartbeatPort heartbeatPort;
 
     @Scheduled(cron = "0 0 7 * * TUE-SAT", zone = "Asia/Seoul")
     public void run() {
         try {
             useCase.process();
+            heartbeatPort.ping(); // 스케줄 실행 성공 신호 — dead-man's switch
         } catch (Exception e) {
             log.error("FIDA scheduler 실행 실패", e);
             safeNotify(e);
