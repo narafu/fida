@@ -1,3 +1,7 @@
+> **[정정, 최신 결정]** 이 문서 작성 이후 "kista-api와 같은 인스턴스(shared_net)" 방침이 **별도의 독립 OCI 인스턴스**로 재확정됐다(Playwright/Gemini OCR의 튀는 부하를 매매 엔진과 격리하기 위함). 아래 원문의 `shared_net`/"kista-api와 동일 서버" 관련 서술은 더 이상 유효하지 않다 — 실제 구현은 `deploy/server/docker-compose.yml`(자체 Caddy 포함)·`deploy/server/Caddyfile`·`deploy/server/README.md`를 참고할 것. 이 파일은 과거 의사결정 기록으로만 남긴다.
+
+---
+
 # fida를 OCI 서버(kista-api와 동일 서버)로 이전
 
 ## Context

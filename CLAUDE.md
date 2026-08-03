@@ -101,7 +101,7 @@ playwright-server/    ← Node.js 사이드카 (Java로 이식 금지)
 
 - 소스 코드: **모든 구현 완료** (KistaAdapter, FidaOrderController 포함 12개 태스크 completed)
 - 구현 태스크는 shrimp-task-manager로 관리 중 (`list_tasks`로 확인)
-- **OCI 상시 기동 서버로 이전 — 저장소 측 구현 완료, 서버 커트오버는 후속 수동 작업**: `.github/workflows/server-deploy.yml` 신설(main 브랜치 push 시 자동 배포, fida 자체 스케줄 실행 시간대(화~토 06:50~07:30 KST)에는 배포 차단, 헬스게이트+자동 롤백) + `deploy/server/docker-compose.yml` 신설. 배포 대상은 `/opt/fida/`(kista-api와 동일 OCI 서버), `FIDA_DOMAIN=fida.kista-app.com`. 서버 `.env`/`secrets/service-account.json` 실제 배치, GitHub Secrets(`SERVER_HOST`/`SERVER_USER`/`SERVER_SSH_KEY`/`SERVER_SSH_PORT`) 등록, kista-api 쪽 `shared_net`/Caddy 커트오버 반영은 아직 미완료
+- **OCI 상시 기동 서버로 이전 — 저장소 측 구현 완료, 서버 커트오버는 후속 수동 작업**: `.github/workflows/server-deploy.yml` 신설(main 브랜치 push 시 자동 배포, fida 자체 스케줄 실행 시간대(화~토 06:50~07:30 KST)에는 배포 차단, 헬스게이트+자동 롤백) + `deploy/server/{docker-compose.yml,Caddyfile,README.md}` 신설. 배포 대상은 `/opt/fida/`(kista-api와 **별도**의 독립 OCI 인스턴스, 자체 Caddy·자체 예약 공인 IP), `FIDA_DOMAIN=fida.kista-app.com`. 서버 `.env`/`secrets/service-account.json` 실제 배치, GitHub Secrets(`SERVER_HOST`/`SERVER_USER`/`SERVER_SSH_KEY`/`SERVER_SSH_PORT`) 등록, OCI 인스턴스·예약 IP 프로비저닝은 아직 미완료
 - **정식 자동 실행 경로는 내부 `FandingScheduler`(OCI 상시 기동), GH Actions는 수동 재실행 전용** — `.github/workflows/fida-schedule.yml`은 cron 트리거를 제거하고 `workflow_dispatch` 수동 재실행 전용으로 축소 (Gemini quota 캐시 로직은 재처리 대비 유지)
 - GitHub Secrets 등록 시 service-account.json: `base64 -i <경로>/service-account.json | tr -d '\n'` → `GOOGLE_SERVICE_ACCOUNT_JSON_B64`로 등록
 - **healthchecks.io dead-man's switch 추가** — `HeartbeatPort`/`HeartbeatAdapter`가 `FandingScheduler.run()` 성공 직후 핑 전송(`HEARTBEAT_URL` 미설정 시 핑 생략, 실패는 로그만 남기고 삼킴). healthchecks.io 콘솔 체크 생성 및 화~토 07:00 KST 기준 예상 주기 등록은 후속 수동 작업

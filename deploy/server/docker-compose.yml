@@ -9,7 +9,6 @@ services:
     depends_on:
       playwright-server:
         condition: service_healthy
-    networks: [default, shared_net]
     expose: ["7070"]
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:7070/actuator/health"]
@@ -34,6 +33,25 @@ services:
       retries: 3
     restart: unless-stopped
 
-networks:
-  shared_net:
-    external: true   # kista-api Caddy가 fida:7070으로 reverse_proxy 하기 위한 결합점
+  caddy:
+    image: caddy:2.9-alpine   # 버전 핀 — 무빙 태그 방지
+    container_name: fida-caddy
+    env_file: .env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    mem_limit: 64m
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+volumes:
+  caddy_data:
+  caddy_config:
