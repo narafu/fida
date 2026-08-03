@@ -162,6 +162,7 @@ jobs:
           ENDSSH
 
       - name: Health gate & auto-rollback
+        if: always()
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
