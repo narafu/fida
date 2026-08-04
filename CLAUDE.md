@@ -105,7 +105,7 @@ playwright-server/    ← Node.js 사이드카 (Java로 이식 금지)
 - **정식 자동 실행 경로는 내부 `FandingScheduler`(OCI 상시 기동), GH Actions는 수동 재실행 전용** — `.github/workflows/fida-schedule.yml`은 cron 트리거를 제거하고 `workflow_dispatch` 수동 재실행 전용으로 축소 (Gemini quota 캐시 로직은 재처리 대비 유지)
 - GitHub Secrets 등록 시 service-account.json: `base64 -i <경로>/service-account.json | tr -d '\n'` → `GOOGLE_SERVICE_ACCOUNT_JSON_B64`로 등록
 - **healthchecks.io dead-man's switch 추가** — `HeartbeatPort`/`HeartbeatAdapter`가 `FandingScheduler.run()` 성공 직후 핑 전송(`HEARTBEAT_URL` 미설정 시 핑 생략, 실패는 로그만 남기고 삼킴). healthchecks.io 콘솔 체크 생성 및 화~토 07:00 KST 기준 예상 주기 등록은 후속 수동 작업
-- **Render·Fly.io 완전 폐기 완료 (2026-08-04)** — `render.yaml` 삭제 + Render 서비스(`srv-d8m9vqcm0tmc73ct17ug`) CLI로 삭제 완료. Fly.io `kista-api` 앱은 확인 시점에 이미 삭제되어 있었음(별도 조치 불필요). **남은 수동 작업**: fida UptimeRobot 모니터를 `fida.onrender.com` → `fida.kista-app.com`으로 전환(API/CLI 경로 없어 대시보드에서만 가능) — Render 서비스 삭제로 기존 URL이 죽어 방치 시 오탐 알림 발생
+- **Render·Fly.io 완전 폐기 완료 (2026-08-04)** — `render.yaml` 삭제 + Render 서비스(`srv-d8m9vqcm0tmc73ct17ug`) CLI로 삭제 완료. Fly.io `kista-api` 앱은 확인 시점에 이미 삭제되어 있었음(별도 조치 불필요). fida UptimeRobot 모니터도 `fida.onrender.com` → `fida.kista-app.com`으로 전환 완료 — Render → OCI 이전 관련 작업 전부 종료
 - KISTA 프로젝트: https://github.com/narafu/kista.git (별도 프로젝트, FIDA가 전송한 주문을 수신해 KIS API로 실행)
 - **KISTA 주문 전송 활성화됨** — `TradingRecordService.process()`: sheet 기록 → 매매 알림 → KISTA 전송 순서. KISTA 실패는 sheet/매매 알림에 영향 없음 (`safeNotify` 패턴)
 - **KISTA 전송 결과(성공/실패)는 별도 텔레그램 메시지로 알림** — 매매 알림과 독립된 2개의 메시지
