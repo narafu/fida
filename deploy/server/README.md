@@ -33,6 +33,7 @@
    sudo chown -R $USER:$USER /opt/fida
    vi /opt/fida/.env   # 아래 .env 내용 참고
    ```
+   `.env` 작성 후 각 줄이 개행으로 분리됐는지 `cat -A /opt/fida/.env`로 확인할 것 — 붙여넣기 방식에 따라 개행이 누락되면 두 변수가 한 줄로 합쳐져(예: `INTERNAL_API_TOKEN=...KISTA_URL=...`) 뒤 변수가 통째로 앞 변수 값에 흡수되고, 애플리케이션은 조용히 `application.yml` 기본값으로 폴백한다(에러 로그 없이 발생하는 실패라 발견이 어려움)
 6. 로그 로테이션 설정 (`/etc/docker/daemon.json`):
    ```json
    {
@@ -78,6 +79,13 @@ GEMINI_QUOTA_USAGE_PATH=/state/gemini-quota-usage.json
 ```
 
 `secrets/service-account.json`은 서버가 직접 관리한다(GitHub Actions가 만들지 않음) — 로컬 원본은 `/Users/phs/secret/google-sheet-secret.json`.
+
+`fida` 컨테이너는 non-root(`appuser`, Alpine `adduser -S`가 부여하는 UID/GID — 통상 100:101이나 고정 보장은 없음)로 실행되므로, 파일을 배치한 뒤 컨테이너 내부 UID/GID로 소유권을 맞춰야 한다(기본 `600`에 소유자가 다르면 `Permission denied`로 부팅 실패):
+```bash
+docker exec fida id                                    # 예: uid=100(appuser) gid=101(appgroup)
+sudo chown 100:101 /opt/fida/secrets/service-account.json
+sudo chmod 600 /opt/fida/secrets/service-account.json
+```
 
 ## 배포 흐름
 

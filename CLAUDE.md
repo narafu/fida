@@ -141,7 +141,7 @@ playwright-server/    ← Node.js 사이드카 (Java로 이식 금지)
 | `FIDA_SCHEDULER_ENABLED` | `false`이면 `!job` 프로필에서도 내장 `FandingScheduler` 비활성화 (기본 `true`) |
 | `GEMINI_QUOTA_USAGE_PATH` | Gemini 일일 사용량 파일 경로 (기본 `/tmp/fida-gemini-quota-usage.json`) — GH Actions는 `/state/...`로 지정해 cache로 영속화, OCI 서버 `.env`도 `deploy/server/docker-compose.yml`의 `./.fida-state:/state` 마운트에 맞춰 `/state/...`로 지정해 컨테이너 재시작 간 영속화 |
 | `SCRAPER_URL` | 기본값 `http://playwright-server:3000/scrape` — 로컬/Docker Compose/OCI 서버 모두 컨테이너 이름 기반 기본값 그대로 사용, 별도 설정 불필요 |
-| `KISTA_URL` | `application.yml` 기본값 `https://kista-api.fly.dev` — 변경 시에만 설정 |
+| `KISTA_URL` | `application.yml` 기본값 `https://api.kista-app.com` (kista-api OCI 인스턴스) — 변경 시에만 설정 |
 | `HEARTBEAT_URL` | healthchecks.io dead-man's switch 핑 URL — 미설정 시 `HeartbeatAdapter`가 핑 생략 (기본값 빈 문자열) |
 
 ## Design Reference

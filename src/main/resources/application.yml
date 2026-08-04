@@ -50,7 +50,7 @@ heartbeat:
   url: ${HEARTBEAT_URL:}
 
 kista:
-  url: ${KISTA_URL:https://kista-api.fly.dev}
+  url: ${KISTA_URL:https://api.kista-app.com}
   internal-token: ${INTERNAL_API_TOKEN}
 
 telegram:
