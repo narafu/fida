@@ -70,7 +70,7 @@ public class GeminiVisionAdapter implements OcrPort {
                     "- 달러기호($)/콤마(,) 제거하고 숫자만, 소수점 유지\n" +
                     "- current_cycle_start: 이미지에서 정확히 \"현사이클 시작 $\" 라벨인 행의 값만 사용. 근처에 \"XXXX 시작원금 $\"(연도+시작원금) 라벨의 행이 별도로 있으며 값이 다름 — 해당 행은 사용 금지. 날짜가 아닌 금액임.\n" +
                     "- season_start_capital: 이미지에서 \"XXXX 시작원금 $\"(연도 또는 시즌N+시작원금) 라벨 행의 값. current_cycle_start와 혼동 검증용이므로 별도로 기록. 없으면 null\n" +
-                    "- capital_rows: 오른쪽 상단 자금 표의 라벨/금액 행을 보이는 그대로 모두 기록. 예: [{\"label\":\"시즌1 시작원금\",\"value\":10000.00},{\"label\":\"현사이클 시작\",\"value\":11783.18},{\"label\":\"잔금\",\"value\":8283.77}]\n" +
+                    "- capital_rows: 오른쪽 상단 자금 표의 라벨/금액 행을 보이는 그대로 모두 기록. 예: [{\"label\":\"시즌1 시작원금\",\"value\":10000.00},{\"label\":\"현사이클 시작\",\"value\":11783.18},{\"label\":\"잔금\",\"value\":8283.77}]. 이미지 맨 위 요약줄의 \"현사이클시작 | N/M\"(분수 형태, 금액 아님)은 이 표와 다른 위치의 별개 항목이므로 capital_rows에 절대 포함하지 말 것\n" +
                     "- performance_rows: 오른쪽 성과 표(종가·평단·현사이클 실현수익·시즌N 실현수익·시즌N 실현수익률)의 라벨/값 행을 보이는 그대로 모두 기록. 값이 0.00이어도 그대로 기록(생략 금지). 예: [{\"label\":\"종가\",\"value\":65.23},{\"label\":\"평단\",\"value\":64.684},{\"label\":\"현사이클 실현수익\",\"value\":0.00},{\"label\":\"시즌2 실현수익\",\"value\":1431.10},{\"label\":\"시즌2 실현수익률\",\"value\":14.31}]\n" +
                     "- current_cycle_realized_pnl: performance_rows와 별개로 이미지에서 정확히 \"현사이클 실현수익 $\" 라벨 행의 값만 사용(참고용 필드, performance_rows가 신뢰 소스). 바로 아래 \"2026 실현수익 $\"(연간 누적)·\"연간 실현수익 $\"·\"시즌N 실현수익 $\"·\"시즌N 실현수익률\" 등 다른 실현수익/수익률 항목은 절대 사용 금지. 값이 0.00이어도 그대로 사용. 음수일 수도 있음.\n" +
                     "- avg_price: 이미지 오른쪽 \"평단\" 라벨 옆 셀 값만 사용. 비어있거나 보유개수가 0이면 null. 종가/현재가 등 다른 가격 사용 금지\n" +
@@ -117,7 +117,14 @@ public class GeminiVisionAdapter implements OcrPort {
                     safeNotifyGeminiError(e);
                     throw e;
                 }
-                return parseOrderJson(text);
+                ParsedOrder parsed = parseOrderJson(text);
+                // 운영 사례(2026-08-14): holdings 관련 필드를 통째로 누락한 채 SELL 주문만 파싱되는 경우가 있어,
+                // 남은 재시도가 있으면 Gemini에 다시 요청해 완전한 응답을 한 번 더 시도한다
+                if (isHoldingsSuspiciouslyMissing(parsed) && attempt < MAX_RETRIES) {
+                    log.warn("holdings=0인데 SELL 주문 존재 (시도 {}/{}) — Gemini 재요청", attempt, MAX_RETRIES);
+                    continue;
+                }
+                return parsed;
             } catch (OcrException e) {
                 // 파싱 오류는 재시도 없이 즉시 rethrow (알림은 위에서 처리)
                 throw e;
@@ -362,19 +369,18 @@ public class GeminiVisionAdapter implements OcrPort {
             return;
         }
         BigDecimal cashBalance = findCapitalRowValue(raw, "잔금");
-        if (cashBalance == null) {
-            return;
-        }
-        // 보유 평가액 = 평단 x 보유수량 (보유 없으면 0)
-        BigDecimal holdingsValue = avgPrice != null ? avgPrice.multiply(BigDecimal.valueOf(holdings)) : BigDecimal.ZERO;
-        BigDecimal expected = cashBalance.add(holdingsValue);
-        if (expected.compareTo(BigDecimal.ZERO) <= 0) {
+        // 잔금 표를 못 읽은 경우(우측 자금 표 전체 누락 등) 시즌 시작원금을 대체 기준선으로 사용
+        BigDecimal expected = cashBalance != null
+                ? cashBalance.add(avgPrice != null ? avgPrice.multiply(BigDecimal.valueOf(holdings)) : BigDecimal.ZERO)
+                : raw.seasonStartCapital();
+        if (expected == null || expected.compareTo(BigDecimal.ZERO) <= 0) {
             return;
         }
         BigDecimal ratio = currentCycleStart.divide(expected, 4, RoundingMode.HALF_UP);
         if (ratio.compareTo(CURRENT_CYCLE_START_RATIO_MAX) > 0 || ratio.compareTo(CURRENT_CYCLE_START_RATIO_MIN) < 0) {
+            String basisLabel = cashBalance != null ? "잔금+보유평가액 추정치" : "시즌 시작원금 기준(잔금 미확보)";
             String warning = "OCR current_cycle_start 이상치 의심: current_cycle_start=" + currentCycleStart
-                    + ", 잔금+보유평가액 추정치=" + expected + " (비율=" + ratio + ") — 이미지 오판독 가능성, 시트·KISTA 값 확인 필요";
+                    + ", " + basisLabel + "=" + expected + " (비율=" + ratio + ") — 이미지 오판독 가능성, 시트·KISTA 값 확인 필요";
             log.warn(warning);
             safeNotifyOcrWarning(warning);
         }
@@ -422,6 +428,10 @@ public class GeminiVisionAdapter implements OcrPort {
 
     private boolean isPositive(Integer value) {
         return value != null && value > 0;
+    }
+
+    private boolean isHoldingsSuspiciouslyMissing(ParsedOrder order) {
+        return order.holdings() == 0 && !order.sellOrders().isEmpty();
     }
 
     // ── Gemini API 응답 DTO ─────────────────────────────────────────

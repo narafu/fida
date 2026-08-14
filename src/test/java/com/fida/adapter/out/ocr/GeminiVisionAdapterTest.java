@@ -147,6 +147,19 @@ class GeminiVisionAdapterTest {
     }
 
     @Test
+    @DisplayName("capital_rows 프롬프트는 맨 위 요약줄의 분수형 현사이클시작을 제외하도록 안내한다")
+    void prompt_excludes_summary_row_current_cycle_fraction_from_capital_rows() throws Exception {
+        // 운영 사례(2026-08-14): 맨 위 요약줄 "현사이클시작 | 7/10"(분수, 금액 아님)이
+        // capital_rows에 잘못 섞여 들어가 "7/10"이 710으로 오파싱되고 A8에 잘못 기록됨
+        var promptField = GeminiVisionAdapter.class.getDeclaredField("PROMPT");
+        promptField.setAccessible(true);
+
+        String prompt = (String) promptField.get(null);
+
+        assertThat(prompt).contains("분수 형태").contains("capital_rows에 절대 포함하지 말 것");
+    }
+
+    @Test
     @DisplayName("Gemini 응답 텍스트가 없으면 OcrException을 던지고 텔레그램 알림을 보낸다")
     void analyze_throws_when_no_response_text() {
         String geminiJson = """
@@ -407,6 +420,23 @@ class GeminiVisionAdapterTest {
     }
 
     @Test
+    @DisplayName("잔금 표를 못 읽었으면 시즌 시작원금 대비 비율로 current_cycle_start 이상치를 경고한다")
+    void analyze_warns_using_season_start_capital_when_cash_balance_missing() {
+        // 운영 사례(2026-08-14): 우측 자금 표 전체(잔금 포함)를 못 읽어 잔금 기준 검증이 무력화된 채
+        // capital_rows에 잘못 섞인 값(710)이 current_cycle_start로 그대로 채택됨
+        String geminiJson = """
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"season_start_capital\\":10000.00,\\"capital_rows\\":[{\\"label\\":\\"현사이클 시작\\",\\"value\\":710}],\\"avg_price\\":131.782,\\"holdings\\":35}"}]}}]}
+                """;
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
+
+        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
+
+        assertThat(result.currentCycleStart()).isEqualByComparingTo(new BigDecimal("710"));
+        verify(notifyPort).notifyOcrWarning(contains("current_cycle_start 이상치 의심"));
+    }
+
+    @Test
     @DisplayName("current_cycle_start가 잔금+보유평가액과 비슷하면 경고하지 않는다")
     void analyze_does_not_warn_when_current_cycle_start_plausible() {
         String geminiJson = """
@@ -450,6 +480,46 @@ class GeminiVisionAdapterTest {
 
         adapter.analyze(List.of(new byte[]{1}));
 
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("holdings=0인데 SELL 주문이 있으면 재요청해 완전한 응답을 얻는다")
+    void analyze_retries_when_holdings_missing_with_sell_orders_present() {
+        // 운영 사례(2026-08-14): 우측 자금 표를 통째로 못 읽어 holdings 관련 필드가 전부 null(=0)로
+        // 파싱됐지만 SELL 주문은 정상 파싱됨 — 재요청 시 두 번째 응답에서 holdings를 확보한다
+        String incomplete = """
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[{\\"price\\":152.95,\\"qty\\":7}],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holdings\\":0}"}]}}]}
+                """;
+        String complete = """
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[{\\"price\\":152.95,\\"qty\\":7}],\\"current_cycle_start\\":null,\\"avg_price\\":131.782,\\"holdings\\":35}"}]}}]}
+                """;
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andRespond(withSuccess(incomplete, MediaType.APPLICATION_JSON));
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andRespond(withSuccess(complete, MediaType.APPLICATION_JSON));
+
+        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
+
+        assertThat(result.holdings()).isEqualTo(35);
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("재시도해도 holdings가 계속 누락되면 마지막 응답을 그대로 반환한다")
+    void analyze_returns_last_result_when_holdings_stays_missing_after_retries() {
+        String incomplete = """
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[{\\"price\\":152.95,\\"qty\\":7}],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holdings\\":0}"}]}}]}
+                """;
+        for (int i = 0; i < 3; i++) {
+            mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                    .andRespond(withSuccess(incomplete, MediaType.APPLICATION_JSON));
+        }
+
+        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
+
+        assertThat(result.holdings()).isZero();
+        assertThat(result.sellOrders()).hasSize(1);
         mockServer.verify();
     }
 
