@@ -154,12 +154,30 @@ if (!EMAIL || !PASSWORD) {
     log(`STEP 4: 이미지 ${imageUrls.length}개 발견`);
 
     // ── STEP 4.5: 팝업/모달 닫기 ───────────────────────────────────
-    await page.evaluate(() => {
-      const btns = Array.from(document.querySelectorAll('button'));
-      const closeBtn = btns.find((b) => b.textContent.trim() === '닫기');
-      if (closeBtn) closeBtn.click();
-    });
-    await sleep(800);
+    // 운영 사례(2026-08-14): "오늘의 미션" 알림이 메인 문서가 아니라
+    // /iframe/today-mission-alarm-dialog 별도 iframe에서 렌더링됨 — 최상위 문서에서
+    // document.querySelectorAll('button')으로 아무리 찾아도 항상 못 찾고(닫기 시도 자체가
+    // 매번 no-op), 스크린샷은 화면에 보이는 픽셀을 그대로 캡처하므로 iframe 위 내용이
+    // 매매표 우측 열(현재 보유·현사이클 시작$ 등)을 가려버림. iframe 프레임을 직접 찾아
+    // 그 안의 닫기 버튼을 클릭해야 함
+    const closeMissionPopup = async () => {
+      for (let i = 0; i < 3; i++) {
+        const missionFrame = page.frames().find((f) => f.url().includes('today-mission-alarm-dialog'));
+        if (!missionFrame) break;
+        const closeBtnHandle = await missionFrame.evaluateHandle(() =>
+          Array.from(document.querySelectorAll('button')).find((b) => b.textContent.trim() === '닫기') || null
+        );
+        const closeBtn = closeBtnHandle.asElement();
+        if (!closeBtn) {
+          await closeBtnHandle.dispose();
+          break;
+        }
+        await closeBtn.click();
+        await closeBtnHandle.dispose();
+        await sleep(300);
+      }
+    };
+    await closeMissionPopup();
 
     // ── STEP 5: 이미지 요소 스크린샷 (CDN 인증 우회) ───────────────
     // page.goto로 이미지 URL 직접 접근 시 CDN이 차단하므로
@@ -168,6 +186,7 @@ if (!EMAIL || !PASSWORD) {
     const imgHandles = await page.$$('img.fd-editor-image');
     const images = [];
     for (const handle of imgHandles) {
+      await closeMissionPopup();
       const buffer = await handle.screenshot({ type: 'png' });
       images.push({ base64: buffer.toString('base64'), mimeType: 'image/png' });
     }
