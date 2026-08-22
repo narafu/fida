@@ -161,20 +161,26 @@ if (!EMAIL || !PASSWORD) {
     // 매매표 우측 열(현재 보유·현사이클 시작$ 등)을 가려버림. iframe 프레임을 직접 찾아
     // 그 안의 닫기 버튼을 클릭해야 함
     const closeMissionPopup = async () => {
-      for (let i = 0; i < 3; i++) {
-        const missionFrame = page.frames().find((f) => f.url().includes('today-mission-alarm-dialog'));
-        if (!missionFrame) break;
-        const closeBtnHandle = await missionFrame.evaluateHandle(() =>
-          Array.from(document.querySelectorAll('button')).find((b) => b.textContent.trim() === '닫기') || null
-        );
-        const closeBtn = closeBtnHandle.asElement();
-        if (!closeBtn) {
+      // iframe이 클릭 사이에 detach되면 evaluateHandle이 "Execution context was destroyed"로
+      // throw할 수 있음 — 팝업 닫기는 best-effort이므로 실패해도 스크린샷 루프를 막지 않는다
+      try {
+        for (let i = 0; i < 3; i++) {
+          const missionFrame = page.frames().find((f) => f.url().includes('today-mission-alarm-dialog'));
+          if (!missionFrame) break;
+          const closeBtnHandle = await missionFrame.evaluateHandle(() =>
+            Array.from(document.querySelectorAll('button')).find((b) => b.textContent.trim() === '닫기') || null
+          );
+          const closeBtn = closeBtnHandle.asElement();
+          if (!closeBtn) {
+            await closeBtnHandle.dispose();
+            break;
+          }
+          await closeBtn.click();
           await closeBtnHandle.dispose();
-          break;
+          await sleep(300);
         }
-        await closeBtn.click();
-        await closeBtnHandle.dispose();
-        await sleep(300);
+      } catch (e) {
+        log(`오늘의 미션 팝업 닫기 실패(무시): ${e.message}`);
       }
     };
     await closeMissionPopup();

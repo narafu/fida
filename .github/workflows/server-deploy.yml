@@ -96,6 +96,7 @@ jobs:
       name: production
     steps:
       - name: fida 스케줄 실행 시간대 배포 가드 (KST)
+        id: deploy_guard
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.force != 'true'
         run: |
           now=$((10#$(TZ=Asia/Seoul date +%H%M)))
@@ -165,7 +166,7 @@ jobs:
           ENDSSH
 
       - name: Health gate & auto-rollback
-        if: always()
+        if: always() && steps.deploy_guard.outcome != 'failure'
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
