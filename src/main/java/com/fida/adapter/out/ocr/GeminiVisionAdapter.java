@@ -83,6 +83,9 @@ public class GeminiVisionAdapter implements OcrPort {
     private static final BigDecimal CURRENT_CYCLE_START_RATIO_MAX = new BigDecimal("5");
     private static final BigDecimal CURRENT_CYCLE_START_RATIO_MIN = new BigDecimal("0.2");
 
+    // holding_qty 대비 cumulative_qty가 이 배율 이상 벌어지면 Gemini 환각(다른 필드 오독)으로 의심
+    private static final int HOLDINGS_MAGNITUDE_MISMATCH_RATIO = 10;
+
     private static final int MAX_RETRIES = 3;
     // 테스트에서 ReflectionTestUtils로 0으로 설정 가능
     long retryDelayMs = 60_000L;
@@ -328,13 +331,22 @@ public class GeminiVisionAdapter implements OcrPort {
 
     private int resolveHoldings(GeminiOrderResult raw) {
         // 이미지의 명시적 누적개수를 우선해 매수개수를 holding_qty로 오인식한 결과를 차단한다.
+        // 단, 운영 사례(2026-08-21): "누적개수" 표 자체가 없는 이미지에서 Gemini가 누적실현수익 등
+        // 엉뚱한 숫자를 cumulative_qty로 환각 응답한 사례 발견 — 두 값이 10배 이상 벌어지면 신뢰할 수 없는
+        // 값으로 보고 명시적 라벨 매칭인 holding_qty를 대신 사용한다.
         if (isPositive(raw.cumulativeQty())) {
             if (isPositive(raw.holdingQty()) && !raw.cumulativeQty().equals(raw.holdingQty())) {
+                boolean implausible = isMagnitudeMismatch(raw.cumulativeQty(), raw.holdingQty());
                 String warning = "OCR 수량 불일치: holding_qty=" + raw.holdingQty()
                         + ", cumulative_qty=" + raw.cumulativeQty()
-                        + " — 누적개수를 최종 보유수량으로 사용";
+                        + (implausible
+                                ? " — 배율 이상으로 cumulative_qty 환각 의심, holding_qty를 최종 보유수량으로 사용"
+                                : " — 누적개수를 최종 보유수량으로 사용");
                 log.warn(warning);
                 safeNotifyOcrWarning(warning);
+                if (implausible) {
+                    return raw.holdingQty();
+                }
             }
             return raw.cumulativeQty();
         }
@@ -428,6 +440,11 @@ public class GeminiVisionAdapter implements OcrPort {
 
     private boolean isPositive(Integer value) {
         return value != null && value > 0;
+    }
+
+    private boolean isMagnitudeMismatch(int a, int b) {
+        return a >= b * (long) HOLDINGS_MAGNITUDE_MISMATCH_RATIO
+                || b >= a * (long) HOLDINGS_MAGNITUDE_MISMATCH_RATIO;
     }
 
     private boolean isHoldingsSuspiciouslyMissing(ParsedOrder order) {
