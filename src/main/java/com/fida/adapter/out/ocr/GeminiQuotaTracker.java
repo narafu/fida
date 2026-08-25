@@ -2,6 +2,7 @@ package com.fida.adapter.out.ocr;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -10,6 +11,7 @@ import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.function.Supplier;
 
+@Slf4j
 @Component
 public class GeminiQuotaTracker {
 
@@ -62,8 +64,9 @@ public class GeminiQuotaTracker {
                 Files.createDirectories(parent);
             }
             objectMapper.writeValue(path.toFile(), state);
-        } catch (Exception ignored) {
-            // Quota 알림은 관측 보조 기능이므로 본 처리 실패 원인이 되면 안 된다.
+        } catch (Exception e) {
+            // Quota 알림은 관측 보조 기능이므로 본 처리 실패 원인이 되면 안 되지만, 무음 실패는 원인 파악을 막으므로 로그는 남긴다.
+            log.warn("Gemini quota 상태 파일 쓰기 실패 (path={}): {}", path, e.getMessage());
         }
     }
 

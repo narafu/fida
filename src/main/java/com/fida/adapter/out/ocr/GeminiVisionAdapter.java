@@ -87,6 +87,8 @@ public class GeminiVisionAdapter implements OcrPort {
     private static final int HOLDINGS_MAGNITUDE_MISMATCH_RATIO = 10;
 
     private static final int MAX_RETRIES = 3;
+    // 잔여 한도가 이 값 이하로 떨어졌을 때만 텔레그램 알림 — 매 호출마다 알리면 정상 성공을 오류로 오인하기 쉬움
+    private static final int QUOTA_WARNING_THRESHOLD = 5;
     // 테스트에서 ReflectionTestUtils로 0으로 설정 가능
     long retryDelayMs = 60_000L;
 
@@ -183,7 +185,10 @@ public class GeminiVisionAdapter implements OcrPort {
     private void notifyGeminiQuota() {
         try {
             GeminiQuotaTracker.QuotaStatus status = quotaTracker.recordRequest();
-            notifyPort.notifyGeminiQuota(status.remaining(), status.limit());
+            // 매 호출마다 알리면 정상 성공 알림을 오류로 오인하기 쉬워, 실제로 소진에 가까울 때만 알림
+            if (status.remaining() <= QUOTA_WARNING_THRESHOLD) {
+                notifyPort.notifyGeminiQuota(status.remaining(), status.limit());
+            }
         } catch (Exception e) {
             log.warn("Gemini 일일한도 알림 실패: {}", e.getMessage());
         }

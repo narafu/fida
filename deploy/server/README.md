@@ -87,6 +87,11 @@ sudo chown 100:101 /opt/fida/secrets/service-account.json
 sudo chmod 600 /opt/fida/secrets/service-account.json
 ```
 
+`.fida-state/`(Gemini quota 사용량 파일 저장 경로)도 동일한 이유로 소유권을 맞춰야 한다 — `mkdir -p`로 생성 시 기본 소유자(root 또는 배포 계정)가 appuser와 달라 쓰기 실패 시 예외를 삼키고 조용히 무시되므로(2026-08 사례: 8/3부터 3주간 quota 카운트가 매번 리셋됨) 최초 배포 시 반드시 확인:
+```bash
+sudo chown 100:101 /opt/fida/.fida-state
+```
+
 ## 배포 흐름
 
 1. `main` push → 테스트
