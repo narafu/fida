@@ -373,6 +373,26 @@ class GeminiVisionAdapterTest {
     }
 
     @Test
+    @DisplayName("holding_qty가 명시적으로 0이어도 cumulative_qty와 배율 이상 벌어지면 환각으로 보고 0을 사용한다")
+    void analyze_prefers_explicit_zero_holding_qty_when_cumulative_qty_is_magnitude_mismatch() {
+        // 운영 사례(2026-09-21): "현재 보유 개수"가 명시적으로 0인 이미지에서 누적실현수익(4,299.87)을
+        // cumulative_qty=4299로 환각 응답. 기존 코드는 holding_qty가 0(비양수)이면 비교 자체를 건너뛰어
+        // 환각값 4299를 그대로 보유수량으로 사용하는 결함이 있었음
+        String geminiJson = """
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":151.83,\\"qty\\":6},{\\"price\\":141.78,\\"qty\\":7}],\\"sell\\":[],\\"current_cycle_start\\":14299.87,\\"current_cycle_realized_pnl\\":0,\\"avg_price\\":null,\\"holding_qty\\":0,\\"cumulative_qty\\":4299,\\"holdings\\":4299}"}]}}]}
+                """;
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
+
+        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
+
+        assertThat(result.holdings()).isEqualTo(0);
+        assertThat(result.avgPrice()).isNull();
+        verify(notifyPort).notifyOcrWarning(contains("holding_qty=0, cumulative_qty=4299"));
+        mockServer.verify();
+    }
+
+    @Test
     @DisplayName("current_cycle_start가 null이면 자금 표의 현사이클 시작 행으로 보정한다")
     void analyze_falls_back_to_capital_row_when_current_cycle_start_is_null() {
         // 운영 사례: Gemini가 오른쪽 상단 자금 표는 읽었지만 current_cycle_start 필드만 null로 반환
