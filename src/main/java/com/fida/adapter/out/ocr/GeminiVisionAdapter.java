@@ -339,8 +339,10 @@ public class GeminiVisionAdapter implements OcrPort {
         // 단, 운영 사례(2026-08-21): "누적개수" 표 자체가 없는 이미지에서 Gemini가 누적실현수익 등
         // 엉뚱한 숫자를 cumulative_qty로 환각 응답한 사례 발견 — 두 값이 10배 이상 벌어지면 신뢰할 수 없는
         // 값으로 보고 명시적 라벨 매칭인 holding_qty를 대신 사용한다.
+        // 운영 사례(2026-09-21): "현재 보유 개수" 라벨이 명시적으로 0인 이미지에서도 같은 환각이 재현됨 —
+        // holding_qty=0은 유효한 신호(라벨 미발견=null과 구분)이므로 isPositive 대신 null 체크로 비교 대상에 포함한다.
         if (isPositive(raw.cumulativeQty())) {
-            if (isPositive(raw.holdingQty()) && !raw.cumulativeQty().equals(raw.holdingQty())) {
+            if (raw.holdingQty() != null && !raw.cumulativeQty().equals(raw.holdingQty())) {
                 boolean implausible = isMagnitudeMismatch(raw.cumulativeQty(), raw.holdingQty());
                 String warning = "OCR 수량 불일치: holding_qty=" + raw.holdingQty()
                         + ", cumulative_qty=" + raw.cumulativeQty()
