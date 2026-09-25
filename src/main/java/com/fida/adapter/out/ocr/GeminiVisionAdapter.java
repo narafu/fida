@@ -1,9 +1,12 @@
 package com.fida.adapter.out.ocr;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.core.JsonLocation;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fida.common.CommaBigDecimalDeserializer;
+import com.fida.common.CommaIntegerDeserializer;
 import com.fida.domain.model.OrderItem;
 import com.fida.domain.model.ParsedOrder;
 import com.fida.domain.port.out.NotifyPort;
@@ -112,6 +115,9 @@ public class GeminiVisionAdapter implements OcrPort {
         var entity = new HttpEntity<>(requestBody, headers);
 
         Exception lastException = null;
+        GeminiJsonParseException lastParseFailure = null;
+        // holdings 누락 의심으로 재요청한 직전 결과 — 이후 시도가 파싱 실패로 끝나면 이 값을 반환
+        ParsedOrder lastParsed = null;
         for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
                 GeminiResponse response = restTemplate.postForObject(ENDPOINT, entity, GeminiResponse.class, apiKey);
@@ -122,16 +128,26 @@ public class GeminiVisionAdapter implements OcrPort {
                     safeNotifyGeminiError(e);
                     throw e;
                 }
-                ParsedOrder parsed = parseOrderJson(text);
+                ParsedOrder parsed;
+                try {
+                    parsed = parseOrderJson(text);
+                } catch (GeminiJsonParseException e) {
+                    // 응답 JSON 형식 오류는 요청마다 달라질 수 있어 남은 시도 내에서 즉시 재요청
+                    lastParseFailure = e;
+                    lastException = null;
+                    log.warn("Gemini JSON 파싱 실패 (시도 {}/{}) — {}", attempt, MAX_RETRIES, e.getMessage());
+                    continue;
+                }
                 // 운영 사례(2026-08-14): holdings 관련 필드를 통째로 누락한 채 SELL 주문만 파싱되는 경우가 있어,
                 // 남은 재시도가 있으면 Gemini에 다시 요청해 완전한 응답을 한 번 더 시도한다
                 if (isHoldingsSuspiciouslyMissing(parsed) && attempt < MAX_RETRIES) {
+                    lastParsed = parsed;
                     log.warn("holdings=0인데 SELL 주문 존재 (시도 {}/{}) — Gemini 재요청", attempt, MAX_RETRIES);
                     continue;
                 }
                 return parsed;
             } catch (OcrException e) {
-                // 파싱 오류는 재시도 없이 즉시 rethrow (알림은 위에서 처리)
+                // 응답 텍스트 없음 등은 재시도 없이 즉시 rethrow (알림은 위에서 처리)
                 throw e;
             } catch (HttpClientErrorException.TooManyRequests e) {
                 notifyGeminiQuota();
@@ -144,6 +160,7 @@ public class GeminiVisionAdapter implements OcrPort {
                 if (e.getStatusCode() == HttpStatus.SERVICE_UNAVAILABLE) {
                     // 503: 재시도 대상
                     lastException = e;
+                    lastParseFailure = null;
                     log.warn("Gemini API 503 오류 (시도 {}/{}), {}초 후 재시도", attempt, MAX_RETRIES, retryDelayMs / 1000);
                     if (attempt < MAX_RETRIES) {
                         sleepQuietly(retryDelayMs);
@@ -163,6 +180,13 @@ public class GeminiVisionAdapter implements OcrPort {
             }
         }
 
+        // 마지막 시도가 JSON 파싱 실패로 끝난 경우 — 앞서 확보한 결과가 있으면 우선 반환
+        if (lastParseFailure != null) {
+            if (lastParsed != null) {
+                return lastParsed;
+            }
+            throw lastParseFailure;
+        }
         // 3회 재시도 모두 실패
         log.error("Gemini API 503 오류 {}회 재시도 후 최종 실패", MAX_RETRIES, lastException);
         safeNotifyGeminiError(lastException);
@@ -228,9 +252,10 @@ public class GeminiVisionAdapter implements OcrPort {
             )));
         }
         // temperature 0: 동일 이미지 재요청 시 결과가 달라지는 비결정적 응답 방지
+        // responseMimeType JSON: 코드펜스·따옴표 없는 콤마 숫자(14,299.87) 등 문법 오류 JSON 응답 차단
         return Map.of(
                 "contents", List.of(Map.of("parts", parts)),
-                "generationConfig", Map.of("temperature", 0)
+                "generationConfig", Map.of("temperature", 0, "responseMimeType", "application/json")
         );
     }
 
@@ -265,48 +290,66 @@ public class GeminiVisionAdapter implements OcrPort {
     private static final Pattern KOREAN_IN_NUMBER = Pattern.compile("(:\\s*-?\\d[\\d,.]*)([가-힣]+)");
 
     private ParsedOrder parseOrderJson(String text) {
-        String jsonStr = text.trim();
-        Matcher m = JSON_FENCE.matcher(jsonStr);
-        if (m.find()) {
-            jsonStr = m.group(1).trim();
-        }
+        String jsonStr = extractJson(text);
         // unquoted 숫자 뒤 한글 제거: "holdings": 7년 → "holdings": 7
         jsonStr = KOREAN_IN_NUMBER.matcher(jsonStr).replaceAll("$1");
         // current_cycle_start 조용한 null 처리(날짜 문자열 등 숫자 변환 실패) 원인 진단용
         log.info("Gemini 원문 JSON 응답: {}", jsonStr);
+        GeminiOrderResult raw;
         try {
-            GeminiOrderResult raw = objectMapper.readValue(jsonStr, GeminiOrderResult.class);
-            log.info(raw.toString());
-
-            int holdings = resolveHoldings(raw);
-            BigDecimal currentCycleStart = resolveCurrentCycleStart(raw);
-            BigDecimal avgPrice = (holdings == 0) ? null : raw.avgPrice();
-            List<OrderItem> buyOrders = toOrderItems(raw.buy());
-            List<OrderItem> sellOrders = resolveSellOrders(raw);
-            // sell이 비어있으면 Gemini가 매도 주문을 누락했을 가능성 — 로그로 원인 추적
-            if (sellOrders.isEmpty()) {
-                log.warn("Gemini sell 파싱 결과 비어있음 — 원시 sell 데이터: {}", raw.sell());
-            }
-            // holdings=0 & sell 존재 시 OCR 오파싱 가능성 — 원문 로그로 추적
-            if (holdings == 0 && !sellOrders.isEmpty()) {
-                log.warn("holdings=0 인데 SELL 주문 존재 — 원문 Gemini 응답:\n{}", text);
-            }
-            // "현사이클 시작"과 "시즌 시작원금" 행을 혼동한 운영 사례 재발 감지 — 로그 + 텔레그램 경고
-            if (currentCycleStart != null && raw.seasonStartCapital() != null
-                    && currentCycleStart.compareTo(raw.seasonStartCapital()) == 0) {
-                String warning = "current_cycle_start가 season_start_capital과 동일함(" + currentCycleStart
-                        + ") — \"현사이클 시작\"/\"시즌 시작원금\" 혼동 파싱 가능성, 시트·KISTA 값 확인 필요";
-                log.warn(warning);
-                safeNotifyOcrWarning(warning);
-            }
-            // 운영 사례(2026-07-30): 이미지 숫자 자체를 오판독해 현사이클 시작이 실제보다 10배 가까이 크게 나온 사례 재발 감지
-            checkCurrentCycleStartPlausibility(raw, currentCycleStart, holdings, avgPrice);
-
-            return new ParsedOrder(buyOrders, sellOrders, currentCycleStart, resolveCurrentCycleRealizedPnl(raw), avgPrice, holdings);
-        } catch (Exception e) {
+            raw = objectMapper.readValue(jsonStr, GeminiOrderResult.class);
+        } catch (JsonProcessingException e) {
             log.error("Gemini JSON 파싱 실패 — 원문 응답:\n{}", text, e);
-            throw new OcrException("Gemini JSON 파싱 실패: " + text.substring(0, Math.min(300, text.length())), e);
+            // 텔레그램 알림에서 실패 원인·위치를 바로 확인할 수 있도록 Jackson 원인을 응답 앞부분보다 먼저 노출
+            throw new GeminiJsonParseException("Gemini JSON 파싱 실패: " + describe(e)
+                    + " / 응답 앞부분: " + text.substring(0, Math.min(200, text.length())), e);
         }
+        log.info(raw.toString());
+
+        int holdings = resolveHoldings(raw);
+        BigDecimal currentCycleStart = resolveCurrentCycleStart(raw);
+        BigDecimal avgPrice = (holdings == 0) ? null : raw.avgPrice();
+        List<OrderItem> buyOrders = toOrderItems(raw.buy());
+        List<OrderItem> sellOrders = resolveSellOrders(raw);
+        // sell이 비어있으면 Gemini가 매도 주문을 누락했을 가능성 — 로그로 원인 추적
+        if (sellOrders.isEmpty()) {
+            log.warn("Gemini sell 파싱 결과 비어있음 — 원시 sell 데이터: {}", raw.sell());
+        }
+        // holdings=0 & sell 존재 시 OCR 오파싱 가능성 — 원문 로그로 추적
+        if (holdings == 0 && !sellOrders.isEmpty()) {
+            log.warn("holdings=0 인데 SELL 주문 존재 — 원문 Gemini 응답:\n{}", text);
+        }
+        // "현사이클 시작"과 "시즌 시작원금" 행을 혼동한 운영 사례 재발 감지 — 로그 + 텔레그램 경고
+        if (currentCycleStart != null && raw.seasonStartCapital() != null
+                && currentCycleStart.compareTo(raw.seasonStartCapital()) == 0) {
+            String warning = "current_cycle_start가 season_start_capital과 동일함(" + currentCycleStart
+                    + ") — \"현사이클 시작\"/\"시즌 시작원금\" 혼동 파싱 가능성, 시트·KISTA 값 확인 필요";
+            log.warn(warning);
+            safeNotifyOcrWarning(warning);
+        }
+        // 운영 사례(2026-07-30): 이미지 숫자 자체를 오판독해 현사이클 시작이 실제보다 10배 가까이 크게 나온 사례 재발 감지
+        checkCurrentCycleStartPlausibility(raw, currentCycleStart, holdings, avgPrice);
+
+        return new ParsedOrder(buyOrders, sellOrders, currentCycleStart, resolveCurrentCycleRealizedPnl(raw), avgPrice, holdings);
+    }
+
+    // 코드펜스 내부 우선, 펜스가 닫히지 않았거나 앞뒤에 설명 문장이 붙은 경우 첫 '{'~마지막 '}' 구간 사용
+    private String extractJson(String text) {
+        String trimmed = text.trim();
+        Matcher m = JSON_FENCE.matcher(trimmed);
+        if (m.find()) {
+            return m.group(1).trim();
+        }
+        int start = trimmed.indexOf('{');
+        int end = trimmed.lastIndexOf('}');
+        return (start >= 0 && end > start) ? trimmed.substring(start, end + 1) : trimmed;
+    }
+
+    // Jackson 예외에서 원인 메시지 + 줄/열 위치만 추출 (전체 스택·소스 덤프 제외)
+    private String describe(JsonProcessingException e) {
+        JsonLocation loc = e.getLocation();
+        String where = loc != null ? " (line " + loc.getLineNr() + ", column " + loc.getColumnNr() + ")" : "";
+        return e.getOriginalMessage() + where;
     }
 
     private List<OrderItem> toOrderItems(List<RawOrderItem> items) {
@@ -458,6 +501,13 @@ public class GeminiVisionAdapter implements OcrPort {
         return order.holdings() == 0 && !order.sellOrders().isEmpty();
     }
 
+    // 응답 JSON 형식 오류 — HTTP 오류와 달리 재요청으로 회복 가능해 별도 타입으로 구분
+    static class GeminiJsonParseException extends OcrException {
+        GeminiJsonParseException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
     // ── Gemini API 응답 DTO ─────────────────────────────────────────
     @JsonIgnoreProperties(ignoreUnknown = true)
     record GeminiResponse(List<Candidate> candidates) {}
@@ -503,19 +553,24 @@ public class GeminiVisionAdapter implements OcrPort {
             BigDecimal avgPrice,
 
             @com.fasterxml.jackson.annotation.JsonProperty("holding_qty")
+            @JsonDeserialize(using = CommaIntegerDeserializer.class)
             Integer holdingQty,
 
             @com.fasterxml.jackson.annotation.JsonProperty("cumulative_qty")
+            @JsonDeserialize(using = CommaIntegerDeserializer.class)
             Integer cumulativeQty,
 
             @com.fasterxml.jackson.annotation.JsonProperty("buy_qty")
+            @JsonDeserialize(using = CommaIntegerDeserializer.class)
             Integer buyQty,
 
+            @JsonDeserialize(using = CommaIntegerDeserializer.class)
             Integer holdings
     ) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record RawOrderItem(BigDecimal price, Object qty) {}
+    record RawOrderItem(@JsonDeserialize(using = CommaBigDecimalDeserializer.class) BigDecimal price,
+                        Object qty) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record CapitalRow(String label,

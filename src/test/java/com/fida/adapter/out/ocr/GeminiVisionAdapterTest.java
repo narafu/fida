@@ -573,4 +573,89 @@ class GeminiVisionAdapterTest {
         mockServer.verify(); // 1회만 호출됨
         verify(notifyPort, times(1)).notifyGeminiError(any(Exception.class));
     }
+
+    @Test
+    @DisplayName("문법 오류 JSON 응답을 막기 위해 JSON 응답 모드를 요청에 포함한다")
+    void request_includes_json_response_mime_type() {
+        String geminiJson = """
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"holdings\\":0}"}]}}]}
+                """;
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andExpect(content().string(containsString("\"responseMimeType\":\"application/json\"")))
+                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
+
+        adapter.analyze(List.of(new byte[]{1}));
+
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("JSON 파싱 실패 시 재요청해 다음 응답으로 파싱한다")
+    void analyze_retries_on_json_parse_failure() {
+        // 따옴표 없는 콤마 숫자 — JSON 문법 오류
+        String invalid = """
+                {"candidates":[{"content":{"parts":[{"text":"```json\\n{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\": 14,299.87,\\"holdings\\":0}\\n```"}]}}]}
+                """;
+        String valid = """
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":\\"14,299.87\\",\\"holdings\\":0}"}]}}]}
+                """;
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andRespond(withSuccess(invalid, MediaType.APPLICATION_JSON));
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andRespond(withSuccess(valid, MediaType.APPLICATION_JSON));
+
+        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
+
+        assertThat(result.currentCycleStart()).isEqualByComparingTo(new BigDecimal("14299.87"));
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("JSON 파싱이 모든 시도에서 실패하면 Jackson 실패 원인을 포함한 예외를 던진다")
+    void analyze_throws_with_parse_reason_after_all_attempts_fail() {
+        String invalid = """
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"current_cycle_start\\": 14,299.87}"}]}}]}
+                """;
+        for (int i = 0; i < 3; i++) {
+            mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                    .andRespond(withSuccess(invalid, MediaType.APPLICATION_JSON));
+        }
+
+        assertThatThrownBy(() -> adapter.analyze(List.of(new byte[]{1})))
+                .isInstanceOf(OcrException.class)
+                .hasMessageContaining("Gemini JSON 파싱 실패")
+                .hasMessageContaining("line 1");
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("수량·가격이 단위·콤마가 붙은 문자열로 와도 숫자로 파싱한다")
+    void analyze_parses_quantity_and_price_strings_leniently() {
+        String geminiJson = """
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":\\"1,234.5\\",\\"qty\\":7}],\\"sell\\":[],\\"avg_price\\":120.5,\\"holding_qty\\":\\"35개\\",\\"cumulative_qty\\":\\"-\\",\\"holdings\\":\\"35.0\\"}"}]}}]}
+                """;
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
+
+        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
+
+        assertThat(result.buyOrders().get(0).price()).isEqualByComparingTo(new BigDecimal("1234.5"));
+        assertThat(result.holdings()).isEqualTo(35);
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("닫히지 않은 코드펜스·앞뒤 설명 문장이 붙은 응답도 JSON 본문만 추출해 파싱한다")
+    void analyze_extracts_json_from_unclosed_fence() {
+        String geminiJson = """
+                {"candidates":[{"content":{"parts":[{"text":"```json\\n{\\"buy\\":[],\\"sell\\":[],\\"holdings\\":12}\\n"}]}}]}
+                """;
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
+
+        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
+
+        assertThat(result.holdings()).isEqualTo(12);
+        mockServer.verify();
+    }
 }
