@@ -62,7 +62,7 @@ class GeminiVisionAdapterTest {
                 {
                   "candidates": [{
                     "content": {
-                      "parts": [{"text": "{\\"buy\\":[{\\"price\\":75000,\\"qty\\":100}],\\"sell\\":[{\\"price\\":80000,\\"qty\\":\\"ALL\\"}],\\"current_cycle_start\\":1000000,\\"avg_price\\":72000,\\"holdings\\":200}"}]
+                      "parts": [{"text": "{\\"buy\\":[{\\"price\\":75000,\\"qty\\":100}],\\"sell\\":[{\\"price\\":80000,\\"qty\\":\\"ALL\\"}],\\"current_cycle_start\\":1000000,\\"avg_price\\":72000,\\"holding_qty\\":200}"}]
                     }
                   }]
                 }
@@ -89,7 +89,7 @@ class GeminiVisionAdapterTest {
     @DisplayName("```json 블록으로 감싸인 응답도 파싱한다")
     void analyze_parses_json_fenced_block() {
         String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"```json\\n{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holdings\\":0}\\n```"}]}}]}
+                {"candidates":[{"content":{"parts":[{"text":"```json\\n{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holding_qty\\":0}\\n```"}]}}]}
                 """;
         mockServer.expect(requestToUriTemplate(
                 "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={key}",
@@ -106,7 +106,7 @@ class GeminiVisionAdapterTest {
     @DisplayName("holdings가 음수이면 0으로 보정한다")
     void analyze_corrects_negative_holdings_to_zero() {
         String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":72000,\\"holdings\\":-5}"}]}}]}
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":72000,\\"holding_qty\\":-5}"}]}}]}
                 """;
         mockServer.expect(requestToUriTemplate(
                 "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={key}",
@@ -123,7 +123,7 @@ class GeminiVisionAdapterTest {
     @DisplayName("holdings가 0이면 avgPrice를 null로 강제한다")
     void analyze_nullifies_avgPrice_when_holdings_zero() {
         String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":72000,\\"holdings\\":0}"}]}}]}
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":72000,\\"holding_qty\\":0}"}]}}]}
                 """;
         mockServer.expect(requestToUriTemplate(
                 "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={key}",
@@ -194,7 +194,7 @@ class GeminiVisionAdapterTest {
     @DisplayName("503 오류 후 재시도에서 성공하면 정상 결과를 반환한다")
     void analyze_succeeds_after_503_retry() {
         String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holdings\\":0}"}]}}]}
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holding_qty\\":0}"}]}}]}
                 """;
         mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
                 .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
@@ -239,7 +239,7 @@ class GeminiVisionAdapterTest {
     void analyze_parses_sell_when_only_last_row_has_data() {
         // 오늘 실제 발생 케이스: Gemini가 sell=[] 반환 → 이 테스트는 Java 필터 로직 검증
         String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":233.84,\\"qty\\":4},{\\"price\\":234.46,\\"qty\\":4}],\\"sell\\":[{\\"price\\":null,\\"qty\\":null},{\\"price\\":null,\\"qty\\":null},{\\"price\\":236.54,\\"qty\\":\\"ALL\\"}],\\"current_cycle_start\\":13977.43,\\"current_cycle_realized_pnl\\":200.68,\\"avg_price\\":225.746,\\"holdings\\":4}"}]}}]}
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":233.84,\\"qty\\":4},{\\"price\\":234.46,\\"qty\\":4}],\\"sell\\":[{\\"price\\":null,\\"qty\\":null},{\\"price\\":null,\\"qty\\":null},{\\"price\\":236.54,\\"qty\\":\\"ALL\\"}],\\"current_cycle_start\\":13977.43,\\"current_cycle_realized_pnl\\":200.68,\\"avg_price\\":225.746,\\"holding_qty\\":4}"}]}}]}
                 """;
         mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
@@ -393,6 +393,54 @@ class GeminiVisionAdapterTest {
     }
 
     @Test
+    @DisplayName("cumulative_qty에 소수 금액이 오면 수량 후보에서 제외하고 holding_qty를 사용한다")
+    void analyze_rejects_decimal_cumulative_qty_as_misread_amount() {
+        // 운영 사례(2026-09-28): 누적실현수익 $4,347.11이 cumulative_qty로 들어옴 — Integer로 받으면 4347로 조용히 잘렸음
+        String geminiJson = """
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":141.72,\\"qty\\":7},{\\"price\\":142.14,\\"qty\\":7}],\\"sell\\":[{\\"price\\":142.67,\\"qty\\":7},{\\"price\\":143.04,\\"qty\\":\\"ALL\\"}],\\"current_cycle_start\\":14347.11,\\"current_cycle_realized_pnl\\":0,\\"avg_price\\":142.450,\\"holding_qty\\":13,\\"cumulative_qty\\":4347.11}"}]}}]}
+                """;
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
+
+        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
+
+        assertThat(result.holdings()).isEqualTo(13);
+        verify(notifyPort).notifyOcrWarning(contains("cumulative_qty=4347.11"));
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("holding_qty·cumulative_qty가 모두 없으면 holdings 필드 값을 쓰지 않고 0으로 본다")
+    void analyze_ignores_unguarded_holdings_field() {
+        // holdings 필드는 프롬프트에서 제거됨 — 과거 응답처럼 환각값(4913)이 실려와도 배율 검증 없는 경로로 채택하지 않음
+        String geminiJson = """
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holdings\\":4913}"}]}}]}
+                """;
+        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
+
+        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
+
+        assertThat(result.holdings()).isZero();
+        mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("프롬프트는 누적실현수익 등 금액을 수량 필드에 넣지 않도록 안내한다")
+    void prompt_forbids_amounts_in_quantity_fields() throws Exception {
+        var promptField = GeminiVisionAdapter.class.getDeclaredField("PROMPT");
+        promptField.setAccessible(true);
+
+        String prompt = (String) promptField.get(null);
+
+        assertThat(prompt)
+                .contains("수량 필드에 절대 넣지 말 것")
+                .contains("누적실현수익")
+                .contains("당일실현")
+                .doesNotContain("\"holdings\"");
+    }
+
+    @Test
     @DisplayName("current_cycle_start가 null이면 자금 표의 현사이클 시작 행으로 보정한다")
     void analyze_falls_back_to_capital_row_when_current_cycle_start_is_null() {
         // 운영 사례: Gemini가 오른쪽 상단 자금 표는 읽었지만 current_cycle_start 필드만 null로 반환
@@ -412,7 +460,7 @@ class GeminiVisionAdapterTest {
     @DisplayName("동일 이미지에 항상 같은 결과를 얻기 위해 temperature 0을 요청에 포함한다")
     void request_includes_zero_temperature_for_deterministic_output() {
         String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holdings\\":0}"}]}}]}
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holding_qty\\":0}"}]}}]}
                 """;
         mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
                 .andExpect(content().string(containsString("\"temperature\":0")))
@@ -428,7 +476,7 @@ class GeminiVisionAdapterTest {
     void analyze_warns_when_current_cycle_start_matches_season_start_capital() {
         // 운영 사례: "현사이클 시작 $"과 "시즌1 시작원금 $"을 혼동해 같은 값(10000.00)을 반환한 케이스 재현
         String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":10000.00,\\"season_start_capital\\":10000.00,\\"avg_price\\":null,\\"holdings\\":0}"}]}}]}
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":10000.00,\\"season_start_capital\\":10000.00,\\"avg_price\\":null,\\"holding_qty\\":0}"}]}}]}
                 """;
         mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
@@ -446,7 +494,7 @@ class GeminiVisionAdapterTest {
         // 운영 사례(2026-07-30): Gemini가 이미지 숫자를 오판독해 현사이클 시작을 143467.67로 반환
         // (잔금 2934.92 + 보유 91주 x 평단 127.458 = 약 14533.6로 실제 값과 10배 가까이 차이)
         String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":143467.67,\\"season_start_capital\\":10000.00,\\"capital_rows\\":[{\\"label\\":\\"잔금 $\\",\\"value\\":2934.92}],\\"avg_price\\":127.458,\\"holdings\\":91}"}]}}]}
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":143467.67,\\"season_start_capital\\":10000.00,\\"capital_rows\\":[{\\"label\\":\\"잔금 $\\",\\"value\\":2934.92}],\\"avg_price\\":127.458,\\"holding_qty\\":91}"}]}}]}
                 """;
         mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
@@ -463,7 +511,7 @@ class GeminiVisionAdapterTest {
         // 운영 사례(2026-08-14): 우측 자금 표 전체(잔금 포함)를 못 읽어 잔금 기준 검증이 무력화된 채
         // capital_rows에 잘못 섞인 값(710)이 current_cycle_start로 그대로 채택됨
         String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"season_start_capital\\":10000.00,\\"capital_rows\\":[{\\"label\\":\\"현사이클 시작\\",\\"value\\":710}],\\"avg_price\\":131.782,\\"holdings\\":35}"}]}}]}
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"season_start_capital\\":10000.00,\\"capital_rows\\":[{\\"label\\":\\"현사이클 시작\\",\\"value\\":710}],\\"avg_price\\":131.782,\\"holding_qty\\":35}"}]}}]}
                 """;
         mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
@@ -478,7 +526,7 @@ class GeminiVisionAdapterTest {
     @DisplayName("current_cycle_start가 잔금+보유평가액과 비슷하면 경고하지 않는다")
     void analyze_does_not_warn_when_current_cycle_start_plausible() {
         String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":14533.60,\\"season_start_capital\\":10000.00,\\"capital_rows\\":[{\\"label\\":\\"잔금 $\\",\\"value\\":2934.92}],\\"avg_price\\":127.458,\\"holdings\\":91}"}]}}]}
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":14533.60,\\"season_start_capital\\":10000.00,\\"capital_rows\\":[{\\"label\\":\\"잔금 $\\",\\"value\\":2934.92}],\\"avg_price\\":127.458,\\"holding_qty\\":91}"}]}}]}
                 """;
         mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
@@ -495,7 +543,7 @@ class GeminiVisionAdapterTest {
         // Gemini가 "Unable to process input image" 400을 반환한 운영 사례 재현
         byte[] jpegBytes = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 1, 2, 3};
         String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holdings\\":0}"}]}}]}
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holding_qty\\":0}"}]}}]}
                 """;
         mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
                 .andExpect(content().string(containsString("\"mime_type\":\"image/jpeg\"")))
@@ -510,7 +558,7 @@ class GeminiVisionAdapterTest {
     @DisplayName("PNG 시그니처가 아닌 임의 바이트는 기본값 image/png로 전송한다")
     void request_defaults_to_png_mime_type_for_unknown_bytes() {
         String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holdings\\":0}"}]}}]}
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holding_qty\\":0}"}]}}]}
                 """;
         mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
                 .andExpect(content().string(containsString("\"mime_type\":\"image/png\"")))
@@ -527,10 +575,10 @@ class GeminiVisionAdapterTest {
         // 운영 사례(2026-08-14): 우측 자금 표를 통째로 못 읽어 holdings 관련 필드가 전부 null(=0)로
         // 파싱됐지만 SELL 주문은 정상 파싱됨 — 재요청 시 두 번째 응답에서 holdings를 확보한다
         String incomplete = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[{\\"price\\":152.95,\\"qty\\":7}],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holdings\\":0}"}]}}]}
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[{\\"price\\":152.95,\\"qty\\":7}],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holding_qty\\":0}"}]}}]}
                 """;
         String complete = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[{\\"price\\":152.95,\\"qty\\":7}],\\"current_cycle_start\\":null,\\"avg_price\\":131.782,\\"holdings\\":35}"}]}}]}
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[{\\"price\\":152.95,\\"qty\\":7}],\\"current_cycle_start\\":null,\\"avg_price\\":131.782,\\"holding_qty\\":35}"}]}}]}
                 """;
         mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
                 .andRespond(withSuccess(incomplete, MediaType.APPLICATION_JSON));
@@ -547,7 +595,7 @@ class GeminiVisionAdapterTest {
     @DisplayName("재시도해도 holdings가 계속 누락되면 마지막 응답을 그대로 반환한다")
     void analyze_returns_last_result_when_holdings_stays_missing_after_retries() {
         String incomplete = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[{\\"price\\":152.95,\\"qty\\":7}],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holdings\\":0}"}]}}]}
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[{\\"price\\":152.95,\\"qty\\":7}],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holding_qty\\":0}"}]}}]}
                 """;
         for (int i = 0; i < 3; i++) {
             mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
@@ -578,7 +626,7 @@ class GeminiVisionAdapterTest {
     @DisplayName("문법 오류 JSON 응답을 막기 위해 JSON 응답 모드를 요청에 포함한다")
     void request_includes_json_response_mime_type() {
         String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"holdings\\":0}"}]}}]}
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"holding_qty\\":0}"}]}}]}
                 """;
         mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
                 .andExpect(content().string(containsString("\"responseMimeType\":\"application/json\"")))
@@ -594,10 +642,10 @@ class GeminiVisionAdapterTest {
     void analyze_retries_on_json_parse_failure() {
         // 따옴표 없는 콤마 숫자 — JSON 문법 오류
         String invalid = """
-                {"candidates":[{"content":{"parts":[{"text":"```json\\n{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\": 14,299.87,\\"holdings\\":0}\\n```"}]}}]}
+                {"candidates":[{"content":{"parts":[{"text":"```json\\n{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\": 14,299.87,\\"holding_qty\\":0}\\n```"}]}}]}
                 """;
         String valid = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":\\"14,299.87\\",\\"holdings\\":0}"}]}}]}
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":\\"14,299.87\\",\\"holding_qty\\":0}"}]}}]}
                 """;
         mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
                 .andRespond(withSuccess(invalid, MediaType.APPLICATION_JSON));
@@ -648,7 +696,7 @@ class GeminiVisionAdapterTest {
     @DisplayName("닫히지 않은 코드펜스·앞뒤 설명 문장이 붙은 응답도 JSON 본문만 추출해 파싱한다")
     void analyze_extracts_json_from_unclosed_fence() {
         String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"```json\\n{\\"buy\\":[],\\"sell\\":[],\\"holdings\\":12}\\n"}]}}]}
+                {"candidates":[{"content":{"parts":[{"text":"```json\\n{\\"buy\\":[],\\"sell\\":[],\\"holding_qty\\":12}\\n"}]}}]}
                 """;
         mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
