@@ -22,8 +22,10 @@ USER appuser
 COPY --from=builder /workspace/build/libs/app.jar app.jar
 
 # JVM 옵션: 컨테이너 메모리 인식 + ZGC (Virtual Threads와 궁합 좋음)
+# user.timezone: 컨테이너 기본 UTC면 07:00 KST 실행 시 LocalDate.now()가 전날이 되므로 KST 고정
 ENV JAVA_OPTS="-XX:MaxRAMPercentage=75.0 \
                -XX:+UseZGC \
+               -Duser.timezone=Asia/Seoul \
                -Djava.security.egd=file:/dev/./urandom"
 
 EXPOSE 7070
