@@ -21,6 +21,9 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class FandingScraperAdapter implements ScraperPort {
 
+    // 게시글 본문 이미지 중 매매표 위치 (0-based, 3번째)
+    private static final int TRADE_TABLE_IMAGE_INDEX = 2;
+
     @Value("${fanding.scraper.url}")
     private String scraperUrl;
 
@@ -49,9 +52,13 @@ public class FandingScraperAdapter implements ScraperPort {
     }
 
     private ScrapedPost toScrapedPost(ScrapeResponse response) {
-        List<byte[]> images = response.images().stream()
-                .map(img -> Base64.getDecoder().decode(img.base64()))
-                .toList();
+        // Privacy 게시글은 3번째 이미지가 매매표 — 4번째 이후(과거 매매표 등)가 붙는 날이 있어 전체 전송 시 OCR이 값을 섞음
+        if (response.images() == null || response.images().size() <= TRADE_TABLE_IMAGE_INDEX) {
+            int count = response.images() == null ? 0 : response.images().size();
+            throw new ScraperException("매매표 이미지(" + (TRADE_TABLE_IMAGE_INDEX + 1) + "번째) 없음: 이미지 " + count + "개");
+        }
+        List<byte[]> images = List.of(
+                Base64.getDecoder().decode(response.images().get(TRADE_TABLE_IMAGE_INDEX).base64()));
         LocalDate postDate = resolveDateFromTitle(response.postTitle());
         if (postDate == null && response.postDate() != null) {
             postDate = LocalDate.parse(response.postDate());

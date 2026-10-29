@@ -49,7 +49,7 @@ class FandingScraperAdapterTest {
                   "postTitle": "매매표 2024-01-15",
                   "postDate": "2024-01-15",
                   "postUrl": "https://fanding.kr/post/1",
-                  "images": [{"base64": "%s", "mimeType": "image/png"}]
+                  "images": [{"base64": "%1$s"}, {"base64": "%1$s"}, {"base64": "%1$s"}]
                 }
                 """.formatted(base64);
 
@@ -64,6 +64,50 @@ class FandingScraperAdapterTest {
         assertThat(result.images()).hasSize(1);
         assertThat(result.images().get(0)).isEqualTo(imageBytes);
         mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("이미지가 4개여도 3번째 매매표 이미지만 사용한다")
+    void scrape_uses_only_third_image_when_extra_images_attached() {
+        String[] base64s = java.util.stream.IntStream.rangeClosed(1, 4)
+                .mapToObj(i -> Base64.getEncoder().encodeToString(new byte[]{(byte) i}))
+                .toArray(String[]::new);
+        String json = """
+                {
+                  "success": true,
+                  "postTitle": "Privacy 10/29 낮기준",
+                  "postUrl": "https://fanding.kr/post/5",
+                  "images": [{"base64": "%s"}, {"base64": "%s"}, {"base64": "%s"}, {"base64": "%s"}]
+                }
+                """.formatted((Object[]) base64s);
+
+        mockServer.expect(requestTo(SCRAPER_URL))
+                .andRespond(withSuccess(json, MediaType.APPLICATION_JSON));
+
+        ScrapedPost result = adapter.scrape();
+
+        assertThat(result.images()).hasSize(1);
+        assertThat(result.images().get(0)).isEqualTo(new byte[]{3});
+    }
+
+    @Test
+    @DisplayName("이미지가 3개 미만이면 ScraperException을 던진다")
+    void scrape_throws_when_trade_table_image_missing() {
+        String json = """
+                {
+                  "success": true,
+                  "postTitle": "Privacy 10/29 낮기준",
+                  "postUrl": "https://fanding.kr/post/6",
+                  "images": [{"base64": "AQ=="}, {"base64": "Ag=="}]
+                }
+                """;
+
+        mockServer.expect(requestTo(SCRAPER_URL))
+                .andRespond(withSuccess(json, MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> adapter.scrape())
+                .isInstanceOf(ScraperException.class)
+                .hasMessageContaining("이미지 2개");
     }
 
     @Test
@@ -119,7 +163,7 @@ class FandingScraperAdapterTest {
                   "postTitle": "Privacy 5/7 _ SOXL 매매기록",
                   "postDate": "2026-05-06",
                   "postUrl": "https://fanding.kr/post/2",
-                  "images": [{"base64": "%s", "mimeType": "image/png"}]
+                  "images": [{"base64": "%1$s"}, {"base64": "%1$s"}, {"base64": "%1$s"}]
                 }
                 """.formatted(base64);
 
@@ -142,7 +186,7 @@ class FandingScraperAdapterTest {
                   "postTitle": "SOXL 매매기록",
                   "postDate": "2026-05-06",
                   "postUrl": "https://fanding.kr/post/3",
-                  "images": [{"base64": "%s", "mimeType": "image/png"}]
+                  "images": [{"base64": "%1$s"}, {"base64": "%1$s"}, {"base64": "%1$s"}]
                 }
                 """.formatted(base64);
 
@@ -164,7 +208,7 @@ class FandingScraperAdapterTest {
                   "success": true,
                   "postTitle": "SOXL 매매기록",
                   "postUrl": "https://fanding.kr/post/4",
-                  "images": [{"base64": "%s", "mimeType": "image/png"}]
+                  "images": [{"base64": "%1$s"}, {"base64": "%1$s"}, {"base64": "%1$s"}]
                 }
                 """.formatted(base64);
 
