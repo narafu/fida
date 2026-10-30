@@ -64,42 +64,19 @@ if (!EMAIL || !PASSWORD) {
     log('STEP 1: 로그인 성공');
 
     // ── STEP 2-3: 최신글 URL 결정 ────────────────────────────────────
-    log('STEP 2: Privacy 시리즈 접근');
-    // 목록 API 응답 대기 등록 — goto 전에 걸어야 첫 요청을 놓치지 않음
-    const listResponse = page.waitForResponse(
-      (r) => r.url().includes('/rest/collection/post_list') && r.url().includes('iCollectionNo=1933'),
-      { timeout: 30000 }
-    );
-    listResponse.catch(() => {}); // goto 중 타임아웃 시 unhandled rejection 방지 — 아래 await에서 다시 throw
-    await page.goto('https://fanding.kr/@laofus/series/1933/', { waitUntil: 'networkidle2' });
-    await sleep(1000);
-
-    // 스크롤 없이 첫 화면만 사용 — 시리즈 목록은 기본 최신순(post_list API sOrderOption=desc)이라
-    // 첫 화면 20개에 최신글이 항상 포함됨. 전체 무한스크롤은 ~52s·Chromium 메모리 ~1.8GiB를 유발했음
-    // 기본 정렬이 바뀌면 첫 화면에 최신글이 없어 옛 글을 최신으로 오판 — 조용히 틀리지 않도록 실패 처리
-    if (!(await listResponse).url().includes('sOrderOption=desc')) {
-      throw new Error('시리즈 목록 기본 정렬이 최신순이 아님 — 최신글 판별 불가');
-    }
-    // 목록 렌더링 대기 — "첫 화 보기" 링크(옛 글)만 먼저 뜬 상태에서 판별하면 옛 글을 최신으로 오판
-    const linkCount = await (await page.waitForFunction(() => {
-      const n = new Set(Array.from(document.querySelectorAll('a[href*="/@laofus/post/"]')).map(a => a.href)).size;
-      return n > 1 ? n : 0;
-    }, { timeout: 15000 })).jsonValue();
-    log(`STEP 2: 게시글 링크 ${linkCount}개 수집`);
-
-    // 최신글 URL 추출 (가장 높은 post ID = 최신)
-    const latestPostUrl = await page.evaluate(() => {
-      const links = [...new Set(
-        Array.from(document.querySelectorAll('a[href*="/@laofus/post/"]')).map(a => a.href)
-      )];
-      // post ID 숫자 기준 내림차순 정렬 → 첫 번째가 최신
-      links.sort((a, b) => {
-        const idA = parseInt(a.match(/\/post\/(\d+)/)?.[1] || '0');
-        const idB = parseInt(b.match(/\/post\/(\d+)/)?.[1] || '0');
-        return idB - idA;
-      });
-      return links[0] || null;
+    log('STEP 2: Privacy 시리즈 최신순 목록 조회');
+    // 시리즈 페이지 렌더링·무한스크롤(~52s, Chromium 메모리 ~1.8GiB) 대신 페이지가 쓰는 목록 API를 직접 호출
+    // 기본 정렬과 무관하게 항상 최신순(sOrderOption=desc) 1페이지를 요청 — 로그인 쿠키 사용을 위해 페이지 컨텍스트에서 fetch
+    const posts = await page.evaluate(async () => {
+      const res = await fetch('/rest/collection/post_list?iCollectionNo=1933&iLimit=20&sOrderOption=desc', { credentials: 'include' });
+      if (!res.ok) throw new Error(`시리즈 목록 API 오류: HTTP ${res.status}`);
+      return (await res.json()).aData?.aPostList ?? [];
     });
+    log(`STEP 2: 게시글 ${posts.length}개 수집`);
+
+    // 최신글 URL 결정 (가장 높은 post ID = 최신)
+    const postNos = posts.map((p) => Number(p.iPostNo)).filter(Number.isFinite);
+    const latestPostUrl = postNos.length ? `https://fanding.kr/@laofus/post/${Math.max(...postNos)}/` : null;
 
     if (!latestPostUrl) {
       throw new Error('라오어 Privacy 최신 게시글을 찾을 수 없습니다.');
