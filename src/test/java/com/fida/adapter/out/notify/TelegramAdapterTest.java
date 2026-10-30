@@ -8,6 +8,7 @@ import com.fida.domain.model.TradingRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.web.client.ExpectedCount;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
@@ -21,6 +22,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
@@ -248,9 +250,24 @@ class TelegramAdapterTest {
         mockServer.expect(requestTo(API_URL))
                 .andRespond(request -> { throw new ResourceAccessException("I/O error on POST request for \"" + API_URL + "\""); });
 
-        assertThatThrownBy(() -> adapter.notifyOcrWarning("경고"))
+        var record = recordWith(new ParsedOrder(List.of(), List.of(), new BigDecimal("1000"), null, null, 0));
+        assertThatThrownBy(() -> adapter.notify(record))
                 .isInstanceOf(NotifyException.class)
                 .hasNoCause()
                 .message().doesNotContain(BOT_TOKEN).contains("***");
+    }
+
+    @Test
+    @DisplayName("부가 알림은 전송 실패해도 예외를 던지지 않는다")
+    void sideChannelNotifications_never_throw() {
+        mockServer.expect(ExpectedCount.manyTimes(), requestTo(API_URL))
+                .andRespond(request -> { throw new ResourceAccessException("I/O error"); });
+
+        assertThatCode(() -> {
+            adapter.notifyApplicationFailure("stage", new RuntimeException("x"));
+            adapter.notifyOcrWarning("경고");
+            adapter.notifyGeminiError(new RuntimeException("x"));
+            adapter.notifyGeminiQuota(1, 20);
+        }).doesNotThrowAnyException();
     }
 }

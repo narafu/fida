@@ -5,8 +5,10 @@ import com.fida.domain.model.TradingRecord;
 import java.util.UUID;
 
 public interface NotifyPort {
+    // 매매 알림 — 실패 시 NotifyException 전파 (호출측이 실패를 집계)
     void notify(TradingRecord record);
 
+    // 이하 부가 알림은 best-effort — 실패해도 예외를 던지지 않음
     void notifyKistaSuccess(TradingRecord record, UUID savedId);
 
     void notifyKistaFailure(TradingRecord record, Exception cause);

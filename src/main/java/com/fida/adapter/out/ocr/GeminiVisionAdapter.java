@@ -130,7 +130,7 @@ public class GeminiVisionAdapter implements OcrPort {
                 String text = extractText(response);
                 if (text == null || text.isBlank()) {
                     OcrException e = new OcrException("Gemini 응답 텍스트 없음");
-                    safeNotifyGeminiError(e);
+                    notifyPort.notifyGeminiError(e);
                     throw e;
                 }
                 ParsedOrder parsed;
@@ -158,7 +158,7 @@ public class GeminiVisionAdapter implements OcrPort {
                 notifyGeminiQuota();
                 // Gemini 무료 티어 일일 요청 한도 초과 — 네트워크 장애가 아니므로 원인을 명확히 노출
                 log.warn("Gemini API 일일한도 초과 (429): {}", e.getResponseBodyAsString());
-                safeNotifyGeminiError(e);
+                notifyPort.notifyGeminiError(e);
                 throw new OcrException("Gemini API 일일한도 초과", e);
             } catch (HttpServerErrorException e) {
                 notifyGeminiQuota();
@@ -173,14 +173,14 @@ public class GeminiVisionAdapter implements OcrPort {
                 } else {
                     // 503 외 서버 오류: 즉시 알림 후 실패
                     log.error("Gemini API 오류 ({})", e.getStatusCode(), e);
-                    safeNotifyGeminiError(e);
+                    notifyPort.notifyGeminiError(e);
                     throw new OcrException("Gemini API 오류: " + e.getStatusCode(), e);
                 }
             } catch (RestClientException e) {
                 notifyGeminiQuota();
                 // 네트워크 등 통신 오류: 즉시 알림 후 실패
                 log.error("Gemini API 통신 오류", e);
-                safeNotifyGeminiError(e);
+                notifyPort.notifyGeminiError(e);
                 throw new OcrException("Gemini API 통신 오류", e);
             }
         }
@@ -194,7 +194,7 @@ public class GeminiVisionAdapter implements OcrPort {
         }
         // 3회 재시도 모두 실패
         log.error("Gemini API 503 오류 {}회 재시도 후 최종 실패", MAX_RETRIES, lastException);
-        safeNotifyGeminiError(lastException);
+        notifyPort.notifyGeminiError(lastException);
         throw new OcrException("Gemini API 503 오류 " + MAX_RETRIES + "회 재시도 후 실패", lastException);
     }
 
@@ -220,22 +220,6 @@ public class GeminiVisionAdapter implements OcrPort {
             }
         } catch (Exception e) {
             log.warn("Gemini 일일한도 알림 실패: {}", e.getMessage());
-        }
-    }
-
-    private void safeNotifyGeminiError(Exception cause) {
-        try {
-            notifyPort.notifyGeminiError(cause);
-        } catch (Exception e) {
-            log.warn("Gemini 오류 알림 실패: {}", e.getMessage());
-        }
-    }
-
-    private void safeNotifyOcrWarning(String warning) {
-        try {
-            notifyPort.notifyOcrWarning(warning);
-        } catch (Exception e) {
-            log.warn("OCR 경고 알림 실패: {}", e.getMessage());
         }
     }
 
@@ -330,7 +314,7 @@ public class GeminiVisionAdapter implements OcrPort {
             String warning = "current_cycle_start가 season_start_capital과 동일함(" + currentCycleStart
                     + ") — \"현사이클 시작\"/\"시즌 시작원금\" 혼동 파싱 가능성, 시트·KISTA 값 확인 필요";
             log.warn(warning);
-            safeNotifyOcrWarning(warning);
+            notifyPort.notifyOcrWarning(warning);
         }
         // 운영 사례(2026-07-30): 이미지 숫자 자체를 오판독해 현사이클 시작이 실제보다 10배 가까이 크게 나온 사례 재발 감지
         checkCurrentCycleStartPlausibility(raw, currentCycleStart, holdings, avgPrice);
@@ -378,7 +362,7 @@ public class GeminiVisionAdapter implements OcrPort {
                 ? "Gemini sell 누락을 sell_rows에서 복구: " + sellRows
                 : "Gemini sell 부분 누락 감지(sell=" + sellOrders + ", sell_rows=" + sellRows + ") — sell_rows 전체를 사용";
         log.warn(warning);
-        safeNotifyOcrWarning(warning);
+        notifyPort.notifyOcrWarning(warning);
         return sellRows;
     }
 
@@ -400,7 +384,7 @@ public class GeminiVisionAdapter implements OcrPort {
                                 ? " — 배율 이상으로 cumulative_qty 환각 의심, holding_qty를 최종 보유수량으로 사용"
                                 : " — 누적개수를 최종 보유수량으로 사용");
                 log.warn(warning);
-                safeNotifyOcrWarning(warning);
+                notifyPort.notifyOcrWarning(warning);
                 if (implausible) {
                     return holdingQty;
                 }
@@ -422,7 +406,7 @@ public class GeminiVisionAdapter implements OcrPort {
             String warning = "OCR 수량 필드 " + field + "=" + value.toPlainString()
                     + " — 정수가 아닌 값(금액 오독 의심)이라 수량 후보에서 제외";
             log.warn(warning);
-            safeNotifyOcrWarning(warning);
+            notifyPort.notifyOcrWarning(warning);
             return null;
         }
     }
@@ -462,7 +446,7 @@ public class GeminiVisionAdapter implements OcrPort {
             String warning = "OCR current_cycle_start 이상치 의심: current_cycle_start=" + currentCycleStart
                     + ", " + basisLabel + "=" + expected + " (비율=" + ratio + ") — 이미지 오판독 가능성, 시트·KISTA 값 확인 필요";
             log.warn(warning);
-            safeNotifyOcrWarning(warning);
+            notifyPort.notifyOcrWarning(warning);
         }
     }
 
@@ -489,7 +473,7 @@ public class GeminiVisionAdapter implements OcrPort {
             String warning = "OCR 실현수익 불일치: current_cycle_realized_pnl=" + raw.currentCycleRealizedPnl()
                     + ", performance_rows 기준=" + fromRows + " — \"현사이클 실현수익\"/\"시즌N 실현수익\" 혼동 가능성, performance_rows 값 사용";
             log.warn(warning);
-            safeNotifyOcrWarning(warning);
+            notifyPort.notifyOcrWarning(warning);
         }
         return fromRows;
     }

@@ -5,6 +5,7 @@ import com.fida.domain.model.OrderItem;
 import com.fida.domain.model.TradingRecord;
 import com.fida.domain.port.out.NotifyPort;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
@@ -16,6 +17,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class TelegramAdapter implements NotifyPort {
@@ -36,35 +38,44 @@ public class TelegramAdapter implements NotifyPort {
         var order = record.order();
         int totalOrders = order.buyOrders().size() + order.sellOrders().size();
         String idStr = savedId != null ? savedId.toString().substring(0, 8) + "..." : "-";
-        sendText("✅ KISTA 저장 완료\n📅 " + record.date() + "\n🆔 " + idStr + "\n🎫 SOXL " + totalOrders + "건");
+        sendQuietly("✅ KISTA 저장 완료\n📅 " + record.date() + "\n🆔 " + idStr + "\n🎫 SOXL " + totalOrders + "건");
     }
 
     @Override
     public void notifyKistaFailure(TradingRecord record, Exception cause) {
         String reason = summarizeReason(cause);
-        sendText("❌ KISTA 전송 실패\n📅 " + record.date() + "\n사유: " + reason);
+        sendQuietly("❌ KISTA 전송 실패\n📅 " + record.date() + "\n사유: " + reason);
     }
 
     @Override
     public void notifyGeminiError(Exception cause) {
         String reason = summarizeReason(cause);
-        sendText("❌ Gemini API 오류\n사유: " + reason);
+        sendQuietly("❌ Gemini API 오류\n사유: " + reason);
     }
 
     @Override
     public void notifyApplicationFailure(String stage, Exception cause) {
         String reason = summarizeReason(cause);
-        sendText("❌ FIDA 실행 실패\n단계: " + stage + "\n사유: " + reason);
+        sendQuietly("❌ FIDA 실행 실패\n단계: " + stage + "\n사유: " + reason);
     }
 
     @Override
     public void notifyOcrWarning(String warning) {
-        sendText("⚠️ OCR 검증 경고\n" + warning);
+        sendQuietly("⚠️ OCR 검증 경고\n" + warning);
     }
 
     @Override
     public void notifyGeminiQuota(int remaining, int limit) {
-        sendText("ℹ️ Gemini 일일한도\n잔여: (" + remaining + "/" + limit + ")");
+        sendQuietly("ℹ️ Gemini 일일한도\n잔여: (" + remaining + "/" + limit + ")");
+    }
+
+    // 부가 알림은 best-effort — 실패는 (마스킹된) 경고 로그만 남기고 삼킴
+    private void sendQuietly(String message) {
+        try {
+            sendText(message);
+        } catch (NotifyException e) {
+            log.warn("{}", e.getMessage());
+        }
     }
 
     private void sendText(String message) {
@@ -101,7 +112,7 @@ public class TelegramAdapter implements NotifyPort {
         return IntStream.range(0, valid.size())
                 .mapToObj(i -> "  " + (i + 1) + ". $" +
                                valid.get(i).price().toPlainString() +
-                               " × " + fmtQty(valid.get(i).qty()))
+                               " × " + fmtQty(valid.get(i)))
                 .collect(Collectors.joining("\n"));
     }
 
@@ -109,9 +120,9 @@ public class TelegramAdapter implements NotifyPort {
         return value != null ? value.toPlainString() : "-";
     }
 
-    private String fmtQty(String qty) {
-        if ("ALL".equals(qty)) return "전부";
-        return qty != null ? qty : "-";
+    private String fmtQty(OrderItem item) {
+        if (item.isAll()) return "전부";
+        return item.qty() != null ? item.qty() : "-";
     }
 
     private String summarizeReason(Exception cause) {

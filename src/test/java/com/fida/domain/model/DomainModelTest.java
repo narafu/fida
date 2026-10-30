@@ -8,6 +8,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DisplayName("도메인 모델 테스트")
 class DomainModelTest {
@@ -76,5 +77,30 @@ class DomainModelTest {
         assertThat(record.postTitle()).isEqualTo("매매표");
         assertThat(record.postUrl()).isEqualTo("https://fanding.kr/1");
         assertThat(record.order()).isEqualTo(parsedOrder);
+    }
+
+    @Test
+    @DisplayName("OrderItem.quantity는 ALL이면 null, 빈값·파싱불가면 0, 숫자면 정수")
+    void orderItem_quantity_rules() {
+        assertThat(new OrderItem(null, "ALL").isAll()).isTrue();
+        assertThat(new OrderItem(null, "ALL").quantity()).isNull();
+        assertThat(new OrderItem(null, " 12 ").quantity()).isEqualTo(12);
+        assertThat(new OrderItem(null, null).quantity()).isZero();
+        assertThat(new OrderItem(null, " ").quantity()).isZero();
+        assertThat(new OrderItem(null, "abc").quantity()).isZero();
+        assertThat(new OrderItem(null, "10").isAll()).isFalse();
+    }
+
+    @Test
+    @DisplayName("ParsedOrder.requireSubmittable은 currentCycleStart 누락·0 이하, holdings=0에 SELL이면 차단")
+    void parsedOrder_requireSubmittable() {
+        var sell = List.of(new OrderItem(new BigDecimal("1"), "1"));
+        assertThatThrownBy(() -> new ParsedOrder(List.of(), List.of(), null, null, null, 1).requireSubmittable())
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("currentCycleStart");
+        assertThatThrownBy(() -> new ParsedOrder(List.of(), List.of(), BigDecimal.ZERO, null, null, 1).requireSubmittable())
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("currentCycleStart");
+        assertThatThrownBy(() -> new ParsedOrder(List.of(), sell, BigDecimal.TEN, null, null, 0).requireSubmittable())
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("holdings=0");
+        new ParsedOrder(List.of(), sell, BigDecimal.TEN, null, null, 1).requireSubmittable();
     }
 }

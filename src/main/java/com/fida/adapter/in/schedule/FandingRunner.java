@@ -26,16 +26,8 @@ public class FandingRunner implements ApplicationRunner {
             log.info("FIDA one-shot 실행 완료");
         } catch (Exception e) {
             log.error("FIDA one-shot 실행 실패", e);
-            safeNotify(e);
+            notifyPort.notifyApplicationFailure("FIDA one-shot", e);
             throw e;
-        }
-    }
-
-    private void safeNotify(Exception cause) {
-        try {
-            notifyPort.notifyApplicationFailure("FIDA one-shot", cause);
-        } catch (Exception notifyError) {
-            log.warn("FIDA one-shot 실패 알림 전송 실패: {}", notifyError.getMessage());
         }
     }
 }

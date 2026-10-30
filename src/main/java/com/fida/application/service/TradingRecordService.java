@@ -50,7 +50,7 @@ public class TradingRecordService implements ProcessTradingRecordUseCase, Proces
         var order = ocr.analyze(post.images());
         var record = TradingRecord.of(post, order);
         var result = kista.sendOrders(record);
-        safeNotify(() -> notify.notifyKistaSuccess(record, result.id()));
+        notify.notifyKistaSuccess(record, result.id());
         return result;
     }
 
@@ -86,18 +86,10 @@ public class TradingRecordService implements ProcessTradingRecordUseCase, Proces
     private void sendToKista(TradingRecord record) {
         try {
             var result = kista.sendOrders(record);
-            safeNotify(() -> notify.notifyKistaSuccess(record, result.id()));
+            notify.notifyKistaSuccess(record, result.id());
         } catch (Exception e) {
             log.warn("KISTA 전송 실패 (무시): {}", e.getMessage());
-            safeNotify(() -> notify.notifyKistaFailure(record, e));
-        }
-    }
-
-    private void safeNotify(Runnable action) {
-        try {
-            action.run();
-        } catch (Exception e) {
-            log.warn("KISTA 결과 알림 실패 (무시): {}", e.getMessage());
+            notify.notifyKistaFailure(record, e);
         }
     }
 }

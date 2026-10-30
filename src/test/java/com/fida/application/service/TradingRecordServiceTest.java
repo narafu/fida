@@ -133,21 +133,6 @@ class TradingRecordServiceTest {
     }
 
     @Test
-    @DisplayName("KISTA 결과 알림 자체가 실패해도 서비스는 정상 완료한다")
-    void process_continues_when_kista_notification_throws() {
-        when(scraperPort.scrape()).thenReturn(samplePost);
-        when(ocrPort.analyze(any())).thenReturn(sampleOrder);
-        when(kistaPort.sendOrders(any())).thenReturn(sampleKistaResult);
-        doThrow(new RuntimeException("알림 실패")).when(notifyPort).notifyKistaSuccess(any(), any());
-        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, kistaPort);
-
-        service.process(); // 알림 실패해도 예외 전파 없이 완료
-
-        verify(sheetPort).update(any());
-        verify(notifyPort).notify(any());
-    }
-
-    @Test
     @DisplayName("sheet.update는 KISTA 결과에 관계없이 항상 먼저 완료된다")
     void process_sheet_update_always_precedes_kista() {
         when(scraperPort.scrape()).thenReturn(samplePost);

@@ -43,18 +43,10 @@ public class FandingScheduler {
             useCase.process();
         } catch (Exception e) {
             log.error("{} 실행 실패", source, e);
-            safeNotify(source, e);
+            notifyPort.notifyApplicationFailure(source, e);
             return false;
         }
         heartbeatPort.ping(); // 스케줄 실행 성공 신호 — dead-man's switch, 핑 실패가 재시도를 유발하지 않도록 try 밖
         return true;
-    }
-
-    private void safeNotify(String source, Exception cause) {
-        try {
-            notifyPort.notifyApplicationFailure(source, cause);
-        } catch (Exception notifyError) {
-            log.warn("{} 실패 알림 전송 실패: {}", source, notifyError.getMessage());
-        }
     }
 }

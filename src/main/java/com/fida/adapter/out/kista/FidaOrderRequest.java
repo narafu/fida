@@ -24,18 +24,18 @@ record FidaOrderRequest(
     public static FidaOrderRequest of(TradingRecord record, String ticker) {
         var parsedOrder = record.order();
 
+        // OCR 파싱 결과가 모순되면 외부 API까지 보내지 않고 즉시 차단한다.
+        parsedOrder.requireSubmittable();
+
         List<Order> orders = Stream.concat(
                 parsedOrder.buyOrders().stream().map(item -> toOrder(item, Order.OrderDirection.BUY)),
                 parsedOrder.sellOrders().stream().map(item -> toOrder(item, Order.OrderDirection.SELL))
         ).toList();
 
-        // OCR 파싱 결과가 모순되면 외부 API까지 보내지 않고 즉시 차단한다.
-        validateOrders(parsedOrder.holdings(), orders);
-
         return new FidaOrderRequest(
                 record.date(),
                 ticker,
-                requirePositive(parsedOrder.currentCycleStart(), "currentCycleStart"),
+                parsedOrder.currentCycleStart(),
                 Objects.requireNonNullElse(parsedOrder.currentCycleRealizedPnl(), BigDecimal.ZERO),
                 parsedOrder.avgPrice(),
                 parsedOrder.holdings(),
@@ -44,40 +44,16 @@ record FidaOrderRequest(
     }
 
     private static Order toOrder(OrderItem item, Order.OrderDirection direction) {
+        Integer quantity = item.quantity();
+        // 비파싱 수량은 0개 주문으로 대체되므로 원문을 로그로 남겨 OCR 오독을 추적
+        if (Integer.valueOf(0).equals(quantity) && item.qty() != null && !item.qty().isBlank() && !item.qty().trim().equals("0")) {
+            log.warn("kista 전송을 위한 수량 파싱 실패 - 입력값: '{}'. 0개로 대체합니다.", item.qty());
+        }
         return new Order(
                 Order.OrderType.LIMIT,
                 direction,
-                parseQty(item.qty()),
+                quantity,
                 Objects.requireNonNullElse(item.price(), BigDecimal.ZERO)
         );
-    }
-
-    private static BigDecimal requirePositive(BigDecimal value, String field) {
-        if (value == null || value.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("KISTA 전송 불가: " + field + " 값이 없거나 0 이하입니다 — Gemini OCR 파싱 결과 확인 필요 (value=" + value + ")");
-        }
-        return value;
-    }
-
-    private static void validateOrders(int holdings, List<Order> orders) {
-        boolean hasSellOrder = orders.stream().anyMatch(order -> order.direction() == Order.OrderDirection.SELL);
-        if (holdings == 0 && hasSellOrder) {
-            throw new IllegalArgumentException("KISTA 전송 불가: holdings=0 인데 SELL 주문이 존재합니다 — Gemini OCR 파싱 결과 확인 필요");
-        }
-    }
-
-    private static Integer parseQty(String qty) {
-        if (Objects.equals(qty, "ALL")) {
-            return null;
-        }
-        if (qty == null || qty.isBlank()) {
-            return 0;
-        }
-        try {
-            return Integer.parseInt(qty.trim());
-        } catch (NumberFormatException e) {
-            log.warn("kista 전송을 위한 수량 파싱 실패 - 입력값: '{}'. 0개로 대체합니다.", qty, e);
-            return 0;
-        }
     }
 }
