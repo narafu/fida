@@ -1,5 +1,6 @@
 package com.fida.adapter.out.notify;
 
+import com.fida.domain.exception.NotifyException;
 import com.fida.domain.model.OrderItem;
 import com.fida.domain.model.ParsedOrder;
 import com.fida.domain.model.ScrapedPost;
@@ -12,6 +13,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
@@ -19,6 +21,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
@@ -237,5 +240,17 @@ class TelegramAdapterTest {
         adapter.notifyOcrWarning("current_cycle_start 혼동 의심");
 
         mockServer.verify();
+    }
+
+    @Test
+    @DisplayName("전송 실패 시 예외 메시지에서 봇 토큰을 가리고 원인 체인을 남기지 않는다")
+    void sendFailure_masks_bot_token() {
+        mockServer.expect(requestTo(API_URL))
+                .andRespond(request -> { throw new ResourceAccessException("I/O error on POST request for \"" + API_URL + "\""); });
+
+        assertThatThrownBy(() -> adapter.notifyOcrWarning("경고"))
+                .isInstanceOf(NotifyException.class)
+                .hasNoCause()
+                .message().doesNotContain(BOT_TOKEN).contains("***");
     }
 }

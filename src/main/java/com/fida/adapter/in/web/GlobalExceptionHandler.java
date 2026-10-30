@@ -106,8 +106,8 @@ public class GlobalExceptionHandler {
     // 텔레그램 자체 실패 — 알림 채널이 죽었으므로 재알림 없이 로그만
     @ExceptionHandler(NotifyException.class)
     public ProblemDetail handleNotify(NotifyException ex) {
-        log.error("NotifyException: {}", ex.getMessage(), ex);
-        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+        log.error("NotifyException: {}", ex.getMessage());
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, "텔레그램 알림 실패");
         detail.setTitle("Notify Unavailable");
         return detail;
     }
@@ -123,7 +123,8 @@ public class GlobalExceptionHandler {
         }
         log.error("Unexpected exception: {}", ex.getMessage(), ex);
         safeNotify("HTTP unexpected", ex);
-        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage());
+        // 원인 메시지는 로그·텔레그램에만 남기고 응답에는 고정 문구만 노출
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
         detail.setTitle("Internal Server Error");
         return detail;
     }

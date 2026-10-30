@@ -73,7 +73,12 @@ public class TelegramAdapter implements NotifyPort {
         try {
             restTemplate.postForObject(url, body, String.class);
         } catch (Exception e) {
-            throw new NotifyException("텔레그램 알림 실패", e);
+            // 요청 URL에 봇 토큰이 포함됨 — 메시지 마스킹 + 원인 체인 제거로 로그·응답 유출 차단
+            String reason = String.valueOf(e.getMessage());
+            if (botToken != null && !botToken.isEmpty()) {
+                reason = reason.replace(botToken, "***");
+            }
+            throw new NotifyException("텔레그램 알림 실패: " + e.getClass().getSimpleName() + " " + reason, null);
         }
     }
 
