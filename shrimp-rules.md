@@ -72,7 +72,7 @@ public class OrderItem { private BigDecimal price; ... }
 ### Adapter 구현
 
 - HTTP 클라이언트: **`RestTemplate` 사용** (WebClient, Feign 금지)
-- `RestTemplate` 타임아웃: 스크래퍼 120초, 그 외 30초
+- `RestTemplate` 타임아웃: 스크래퍼 전용 `scraperRestTemplate` 180초(playwright execFile 170초보다 길게), 그 외 공용 빈 120초
 - 실패 시 반드시 도메인 예외 throw (`ScraperException`, `OcrException` 등)
 
 ---

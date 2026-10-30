@@ -48,7 +48,7 @@ function runScraper(res, label) {
   execFile('node', [SCRIPT], {
     env: process.env,
     maxBuffer: 100 * 1024 * 1024,
-    timeout: 110000, // Java RestTemplate readTimeout(120s)보다 짧게 — 타임아웃 시 Java가 상세 오류 바디를 받도록
+    timeout: 170000, // 정상 ~91s(1 vCPU 기준) 대비 여유. Java RestTemplate readTimeout(180s)보다 짧게 — 타임아웃 시 Java가 상세 오류 바디를 받도록
   }, (error, stdout, stderr) => {
     scraping = false;
     const elapsed = ((Date.now() - start) / 1000).toFixed(1);

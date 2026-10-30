@@ -28,13 +28,13 @@ public class FandingScraperAdapter implements ScraperPort {
     @Value("${fanding.scraper.url}")
     private String scraperUrl;
 
-    private final RestTemplate restTemplate;
+    private final RestTemplate scraperRestTemplate; // 스크래핑 전용 긴 readTimeout 빈 (RestTemplateConfig)
 
     @Override
     public ScrapedPost scrape() {
         ScrapeResponse response;
         try {
-            response = restTemplate.getForObject(scraperUrl, ScrapeResponse.class);
+            response = scraperRestTemplate.getForObject(scraperUrl, ScrapeResponse.class);
         } catch (HttpStatusCodeException e) {
             throw new ScraperException("playwright-server 호출 실패: " + e.getStatusCode()
                     + " body=" + e.getResponseBodyAsString(), e);
