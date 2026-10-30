@@ -65,12 +65,21 @@ if (!EMAIL || !PASSWORD) {
 
     // ── STEP 2-3: 최신글 URL 결정 ────────────────────────────────────
     log('STEP 2: Privacy 시리즈 접근');
+    // 목록 API 응답 대기 등록 — goto 전에 걸어야 첫 요청을 놓치지 않음
+    const listResponse = page.waitForResponse(
+      (r) => r.url().includes('/rest/collection/post_list') && r.url().includes('iCollectionNo=1933'),
+      { timeout: 30000 }
+    );
+    listResponse.catch(() => {}); // goto 중 타임아웃 시 unhandled rejection 방지 — 아래 await에서 다시 throw
     await page.goto('https://fanding.kr/@laofus/series/1933/', { waitUntil: 'networkidle2' });
     await sleep(1000);
 
     // 스크롤 없이 첫 화면만 사용 — 시리즈 목록은 기본 최신순(post_list API sOrderOption=desc)이라
     // 첫 화면 20개에 최신글이 항상 포함됨. 전체 무한스크롤은 ~52s·Chromium 메모리 ~1.8GiB를 유발했음
-    // ponytail: 기본 정렬이 오래된순으로 바뀌면 오판 — 그때는 post_list API를 sOrderOption=desc로 직접 호출
+    // 기본 정렬이 바뀌면 첫 화면에 최신글이 없어 옛 글을 최신으로 오판 — 조용히 틀리지 않도록 실패 처리
+    if (!(await listResponse).url().includes('sOrderOption=desc')) {
+      throw new Error('시리즈 목록 기본 정렬이 최신순이 아님 — 최신글 판별 불가');
+    }
     // 목록 렌더링 대기 — "첫 화 보기" 링크(옛 글)만 먼저 뜬 상태에서 판별하면 옛 글을 최신으로 오판
     const linkCount = await (await page.waitForFunction(() => {
       const n = new Set(Array.from(document.querySelectorAll('a[href*="/@laofus/post/"]')).map(a => a.href)).size;
