@@ -10,6 +10,7 @@ services:
       playwright-server:
         condition: service_healthy
     expose: ["7070"]
+    mem_limit: 1536m   # 호스트 6GB 보호 — 평시 ~360MiB, JVM 힙은 MaxRAMPercentage=75%로 이 한도 기준
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:7070/actuator/health"]
       interval: 30s
@@ -24,8 +25,7 @@ services:
     environment:
       FANDING_EMAIL: ${FANDING_EMAIL}
       FANDING_PASSWORD: ${FANDING_PASSWORD}
-    security_opt:
-      - seccomp:unconfined  # Chromium needs syscalls blocked by Docker default seccomp profile
+    mem_limit: 1536m   # Chromium 폭주 시 호스트 보호 (Chromium은 비root·--no-sandbox라 기본 seccomp로 동작)
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
       interval: 30s

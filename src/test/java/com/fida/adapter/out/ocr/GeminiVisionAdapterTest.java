@@ -26,7 +26,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestToUriTemplate;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
@@ -36,7 +37,7 @@ class GeminiVisionAdapterTest {
 
     private static final String API_KEY = "test-key";
     private static final String GEMINI_ENDPOINT =
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={key}";
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent";
 
     private RestTemplate restTemplate;
     private MockRestServiceServer mockServer;
@@ -67,9 +68,7 @@ class GeminiVisionAdapterTest {
                   }]
                 }
                 """;
-        mockServer.expect(requestToUriTemplate(
-                "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={key}",
-                API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
         ParsedOrder result = adapter.analyze(List.of(new byte[]{1, 2, 3}));
@@ -91,9 +90,7 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"```json\\n{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holding_qty\\":0}\\n```"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(
-                "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={key}",
-                API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
         ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
@@ -108,9 +105,7 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":72000,\\"holding_qty\\":-5}"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(
-                "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={key}",
-                API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
         ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
@@ -125,9 +120,7 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":72000,\\"holding_qty\\":0}"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(
-                "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={key}",
-                API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
         ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
@@ -165,7 +158,8 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":""}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
+                .andExpect(header("x-goog-api-key", API_KEY))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
         assertThatThrownBy(() -> adapter.analyze(List.of(new byte[]{1})))
@@ -178,7 +172,7 @@ class GeminiVisionAdapterTest {
     @DisplayName("503 오류 시 3회 재시도 후 실패하면 텔레그램 알림을 보낸다")
     void analyze_retries_three_times_on_503_then_notifies() {
         for (int i = 0; i < 3; i++) {
-            mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+            mockServer.expect(requestTo(GEMINI_ENDPOINT))
                     .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
         }
 
@@ -196,9 +190,9 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holding_qty\\":0}"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
         ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
@@ -220,7 +214,7 @@ class GeminiVisionAdapterTest {
                   }
                 }
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS)
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(quotaExceededBody));
@@ -241,7 +235,7 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":233.84,\\"qty\\":4},{\\"price\\":234.46,\\"qty\\":4}],\\"sell\\":[{\\"price\\":null,\\"qty\\":null},{\\"price\\":null,\\"qty\\":null},{\\"price\\":236.54,\\"qty\\":\\"ALL\\"}],\\"current_cycle_start\\":13977.43,\\"current_cycle_realized_pnl\\":200.68,\\"avg_price\\":225.746,\\"holding_qty\\":4}"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
         ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
@@ -260,7 +254,7 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":110.96,\\"qty\\":7},{\\"price\\":111.24,\\"qty\\":7}],\\"sell\\":[],\\"sell_rows\\":[{\\"price\\":null,\\"qty\\":null},{\\"price\\":null,\\"qty\\":null},{\\"price\\":112.79,\\"qty\\":\\"ALL\\"}],\\"current_cycle_start\\":12001.10,\\"current_cycle_realized_pnl\\":0,\\"avg_price\\":111.262,\\"cumulative_qty\\":7,\\"holdings\\":7}"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
         ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
@@ -276,7 +270,7 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"sell_rows\\":[{\\"price\\":null,\\"qty\\":null},{\\"price\\":null,\\"qty\\":null},{\\"price\\":null,\\"qty\\":null}],\\"current_cycle_start\\":12001.10,\\"avg_price\\":111.262,\\"cumulative_qty\\":7,\\"holdings\\":7}"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
         ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
@@ -291,7 +285,7 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[{\\"price\\":112.79,\\"qty\\":\\"ALL\\"}],\\"sell_rows\\":[{\\"price\\":null,\\"qty\\":null},{\\"price\\":null,\\"qty\\":null},{\\"price\\":112.79,\\"qty\\":\\"ALL\\"}],\\"current_cycle_start\\":12001.10,\\"avg_price\\":111.262,\\"cumulative_qty\\":7,\\"holdings\\":7}"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
         ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
@@ -308,7 +302,7 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":216.84,\\"qty\\":4},{\\"price\\":217.77,\\"qty\\":4}],\\"sell\\":[{\\"price\\":218.92,\\"qty\\":\\"ALL\\"}],\\"sell_rows\\":[{\\"price\\":null,\\"qty\\":null},{\\"price\\":218.23,\\"qty\\":4},{\\"price\\":218.92,\\"qty\\":\\"ALL\\"}],\\"current_cycle_start\\":13158.78,\\"current_cycle_realized_pnl\\":0,\\"avg_price\\":217.897,\\"cumulative_qty\\":7,\\"holdings\\":7}"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
         ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
@@ -326,7 +320,7 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":39.39,\\"qty\\":27},{\\"price\\":39.15,\\"qty\\":28}],\\"sell\\":[{\\"price\\":39.73,\\"qty\\":\\"ALL\\"}],\\"current_cycle_start\\":14063.31,\\"current_cycle_realized_pnl\\":289.54,\\"avg_price\\":35.564,\\"holdings\\":0,\\"cumulative_qty\\":27,\\"buy_qty\\":-57}"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
         ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
@@ -344,7 +338,7 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":26.10,\\"qty\\":32},{\\"price\\":26.30,\\"qty\\":32}],\\"sell\\":[{\\"price\\":26.64,\\"qty\\":\\"ALL\\"},{\\"price\\":26.45,\\"qty\\":29}],\\"current_cycle_start\\":11085.99,\\"current_cycle_realized_pnl\\":73.53,\\"avg_price\\":26.525,\\"holding_qty\\":57,\\"cumulative_qty\\":74,\\"buy_qty\\":57,\\"holdings\\":74}"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
         ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
@@ -362,7 +356,7 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":119.76,\\"qty\\":8},{\\"price\\":122.01,\\"qty\\":9}],\\"sell\\":[{\\"price\\":152.18,\\"qty\\":7},{\\"price\\":127.67,\\"qty\\":7},{\\"price\\":122.45,\\"qty\\":8}],\\"current_cycle_start\\":14467.67,\\"current_cycle_realized_pnl\\":446.16,\\"avg_price\\":130.175,\\"holding_qty\\":49,\\"cumulative_qty\\":4913,\\"holdings\\":4913}"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
         ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
@@ -381,7 +375,7 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":151.83,\\"qty\\":6},{\\"price\\":141.78,\\"qty\\":7}],\\"sell\\":[],\\"current_cycle_start\\":14299.87,\\"current_cycle_realized_pnl\\":0,\\"avg_price\\":null,\\"holding_qty\\":0,\\"cumulative_qty\\":4299,\\"holdings\\":4299}"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
         ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
@@ -399,7 +393,7 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":141.72,\\"qty\\":7},{\\"price\\":142.14,\\"qty\\":7}],\\"sell\\":[{\\"price\\":142.67,\\"qty\\":7},{\\"price\\":143.04,\\"qty\\":\\"ALL\\"}],\\"current_cycle_start\\":14347.11,\\"current_cycle_realized_pnl\\":0,\\"avg_price\\":142.450,\\"holding_qty\\":13,\\"cumulative_qty\\":4347.11}"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
         ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
@@ -416,7 +410,7 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holdings\\":4913}"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
         ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
@@ -447,7 +441,7 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":25.95,\\"qty\\":34},{\\"price\\":26.20,\\"qty\\":34}],\\"sell\\":[{\\"price\\":26.48,\\"qty\\":33},{\\"price\\":26.33,\\"qty\\":32},{\\"price\\":27.50,\\"qty\\":30}],\\"current_cycle_start\\":null,\\"capital_rows\\":[{\\"label\\":\\"시즌1 시작원금\\",\\"value\\":10000.00},{\\"label\\":\\"현사이클 시작\\",\\"value\\":11783.18},{\\"label\\":\\"잔금\\",\\"value\\":8283.77}],\\"current_cycle_realized_pnl\\":-17.61,\\"avg_price\\":27.202,\\"cumulative_qty\\":128,\\"holdings\\":128}"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
         ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
@@ -462,7 +456,7 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holding_qty\\":0}"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andExpect(content().string(containsString("\"temperature\":0")))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
@@ -478,7 +472,7 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":10000.00,\\"season_start_capital\\":10000.00,\\"avg_price\\":null,\\"holding_qty\\":0}"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
         ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
@@ -496,7 +490,7 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":143467.67,\\"season_start_capital\\":10000.00,\\"capital_rows\\":[{\\"label\\":\\"잔금 $\\",\\"value\\":2934.92}],\\"avg_price\\":127.458,\\"holding_qty\\":91}"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
         ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
@@ -513,7 +507,7 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"season_start_capital\\":10000.00,\\"capital_rows\\":[{\\"label\\":\\"현사이클 시작\\",\\"value\\":710}],\\"avg_price\\":131.782,\\"holding_qty\\":35}"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
         ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
@@ -528,7 +522,7 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":14533.60,\\"season_start_capital\\":10000.00,\\"capital_rows\\":[{\\"label\\":\\"잔금 $\\",\\"value\\":2934.92}],\\"avg_price\\":127.458,\\"holding_qty\\":91}"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
         adapter.analyze(List.of(new byte[]{1}));
@@ -545,7 +539,7 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holding_qty\\":0}"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andExpect(content().string(containsString("\"mime_type\":\"image/jpeg\"")))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
@@ -560,7 +554,7 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holding_qty\\":0}"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andExpect(content().string(containsString("\"mime_type\":\"image/png\"")))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
@@ -580,9 +574,9 @@ class GeminiVisionAdapterTest {
         String complete = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[{\\"price\\":152.95,\\"qty\\":7}],\\"current_cycle_start\\":null,\\"avg_price\\":131.782,\\"holding_qty\\":35}"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(incomplete, MediaType.APPLICATION_JSON));
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(complete, MediaType.APPLICATION_JSON));
 
         ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
@@ -598,7 +592,7 @@ class GeminiVisionAdapterTest {
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[{\\"price\\":152.95,\\"qty\\":7}],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holding_qty\\":0}"}]}}]}
                 """;
         for (int i = 0; i < 3; i++) {
-            mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+            mockServer.expect(requestTo(GEMINI_ENDPOINT))
                     .andRespond(withSuccess(incomplete, MediaType.APPLICATION_JSON));
         }
 
@@ -612,7 +606,7 @@ class GeminiVisionAdapterTest {
     @Test
     @DisplayName("503 외 서버 오류는 재시도 없이 즉시 텔레그램 알림을 보낸다")
     void analyze_notifies_immediately_on_non_503_error() {
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withServerError()); // 500
 
         assertThatThrownBy(() -> adapter.analyze(List.of(new byte[]{1})))
@@ -628,7 +622,7 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"holding_qty\\":0}"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andExpect(content().string(containsString("\"responseMimeType\":\"application/json\"")))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
@@ -647,9 +641,9 @@ class GeminiVisionAdapterTest {
         String valid = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":\\"14,299.87\\",\\"holding_qty\\":0}"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(invalid, MediaType.APPLICATION_JSON));
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(valid, MediaType.APPLICATION_JSON));
 
         ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
@@ -665,7 +659,7 @@ class GeminiVisionAdapterTest {
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"current_cycle_start\\": 14,299.87}"}]}}]}
                 """;
         for (int i = 0; i < 3; i++) {
-            mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+            mockServer.expect(requestTo(GEMINI_ENDPOINT))
                     .andRespond(withSuccess(invalid, MediaType.APPLICATION_JSON));
         }
 
@@ -682,7 +676,7 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":\\"1,234.5\\",\\"qty\\":7}],\\"sell\\":[],\\"avg_price\\":120.5,\\"holding_qty\\":\\"35개\\",\\"cumulative_qty\\":\\"-\\",\\"holdings\\":\\"35.0\\"}"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
         ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
@@ -698,7 +692,7 @@ class GeminiVisionAdapterTest {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"```json\\n{\\"buy\\":[],\\"sell\\":[],\\"holding_qty\\":12}\\n"}]}}]}
                 """;
-        mockServer.expect(requestToUriTemplate(GEMINI_ENDPOINT, API_KEY))
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
         ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));

@@ -37,7 +37,7 @@ import java.util.regex.Pattern;
 public class GeminiVisionAdapter implements OcrPort {
 
     private static final String ENDPOINT =
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={key}";
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent";
 
     private static final String PROMPT =
             "이 이미지는 주식 매매표입니다. 아래 JSON 형식으로만 응답하세요. <> 안은 값의 타입 설명이며, 값이 없으면 null:\n" +
@@ -114,6 +114,8 @@ public class GeminiVisionAdapter implements OcrPort {
         Object requestBody = buildRequest(images);
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        // API 키는 헤더로 전송 — URL 쿼리에 두면 RestClientException 메시지에 포함돼 로그·텔레그램으로 유출됨
+        headers.set("x-goog-api-key", apiKey);
         var entity = new HttpEntity<>(requestBody, headers);
 
         Exception lastException = null;
@@ -122,7 +124,7 @@ public class GeminiVisionAdapter implements OcrPort {
         ParsedOrder lastParsed = null;
         for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
-                GeminiResponse response = restTemplate.postForObject(ENDPOINT, entity, GeminiResponse.class, apiKey);
+                GeminiResponse response = restTemplate.postForObject(ENDPOINT, entity, GeminiResponse.class);
                 notifyGeminiQuota();
                 String text = extractText(response);
                 if (text == null || text.isBlank()) {

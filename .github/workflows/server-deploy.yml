@@ -17,11 +17,14 @@ permissions:
 
 env:
   DEPLOY_PATH: /opt/fida
+  # 서버 SSH 호스트 공개키 (ed25519, SHA256:mbdWKf1f/xQvQG5mna2/nOr1ZNRafC8gLe/sP5Y4V4Q)
+  SERVER_HOST_KEY: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH4f5q5saaXulIhwzNUWl9u42xa3FLzi6LPDe61H+Fo2
 
 jobs:
   verify:
     name: Full Test Suite
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
@@ -37,6 +40,7 @@ jobs:
   build:
     name: Build & Push Images
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     needs: verify
     outputs:
       fida_image: ${{ steps.image.outputs.fida_image }}
@@ -90,6 +94,7 @@ jobs:
   deploy:
     name: Deploy to Server
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: build
     concurrency: server-production
     environment:
@@ -121,7 +126,10 @@ jobs:
           install -m 700 -d ~/.ssh
           printf '%s\n' "$SERVER_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -p "$SERVER_SSH_PORT" "$SERVER_HOST" >> ~/.ssh/known_hosts
+          # 호스트 키 고정 — ssh-keyscan(TOFU)은 첫 연결 MITM을 막지 못함. 서버 재설치 시 `ssh-keyscan -t ed25519 <host>`로 갱신
+          host_entry="$SERVER_HOST"
+          if [ "$SERVER_SSH_PORT" != 22 ]; then host_entry="[$SERVER_HOST]:$SERVER_SSH_PORT"; fi
+          printf '%s %s\n' "$host_entry" "$SERVER_HOST_KEY" > ~/.ssh/known_hosts
 
       - name: Upload deployment files
         env:
@@ -152,9 +160,9 @@ jobs:
 
             # 현재 이미지 저장 (롤백용)
             PREV_FIDA_IMAGE=$(docker compose ps fida --format '{{.Image}}' 2>/dev/null || echo "")
-            echo "$PREV_FIDA_IMAGE" > /tmp/fida-prev-image
+            echo "$PREV_FIDA_IMAGE" > .prev-fida-image
             PREV_PLAYWRIGHT_IMAGE=$(docker compose ps playwright-server --format '{{.Image}}' 2>/dev/null || echo "")
-            echo "$PREV_PLAYWRIGHT_IMAGE" > /tmp/fida-playwright-prev-image
+            echo "$PREV_PLAYWRIGHT_IMAGE" > .prev-playwright-image
 
             # GHCR 로그인 + fida/playwright-server만 배포 (caddy는 --no-deps로 제외 — routine 배포가 리버스 프록시를 건드리지 않도록)
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
@@ -163,6 +171,13 @@ jobs:
             docker compose up -d --no-deps fida playwright-server
             # caddy는 이미지 태그가 고정(caddy:2.9-alpine)이라 재생성되지 않고, 없으면 최초 생성됨 — 최초 배포 시 caddy가 영원히 안 뜨는 문제 방지
             docker compose up -d caddy
+            # scp로 갱신된 Caddyfile 반영 — graceful reload(무중단), 설정 오류 시 기존 설정 유지 + 배포 실패로 표시
+            # caddy 최초 생성 직후엔 admin API(:2019)가 아직 안 떠 있을 수 있어 짧게 재시도. scp가 같은 inode에 덮어써야 단일 파일 bind mount에 반영됨(mv/rsync 금지)
+            for i in 1 2 3 4 5; do
+              docker exec fida-caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile && break
+              [ "$i" = 5 ] && exit 1
+              sleep 2
+            done
           ENDSSH
 
       - name: Health gate & auto-rollback
@@ -179,14 +194,16 @@ jobs:
 
             echo "헬스 게이트 시작 (최대 5분)..."
             for i in $(seq 1 30); do
-              STATUS=$(docker inspect --format '{{.State.Health.Status}}' fida 2>/dev/null || echo "unknown")
-              if [ "$STATUS" = "healthy" ]; then
+              FIDA_STATUS=$(docker inspect --format '{{.State.Health.Status}}' fida 2>/dev/null || echo "unknown")
+              PW_STATUS=$(docker inspect --format '{{.State.Health.Status}}' fida-playwright-server 2>/dev/null || echo "unknown")
+              STATUS="fida=${FIDA_STATUS}, playwright-server=${PW_STATUS}"
+              if [ "$FIDA_STATUS" = "healthy" ] && [ "$PW_STATUS" = "healthy" ]; then
                 echo "✓ 헬스체크 통과 (${i}회 시도)"
                 docker image prune -f || true
                 exit 0
               fi
-              if [ "$STATUS" = "unhealthy" ]; then
-                echo "✗ 헬스체크 실패 (unhealthy, ${i}회 시도)"
+              if [ "$FIDA_STATUS" = "unhealthy" ] || [ "$PW_STATUS" = "unhealthy" ]; then
+                echo "✗ 헬스체크 실패 (${STATUS}, ${i}회 시도)"
                 break
               fi
               echo "  대기 중... (${i}/30, 상태: ${STATUS})"
@@ -194,8 +211,8 @@ jobs:
             done
 
             # 헬스체크 실패 → 이전 이미지로 자동 롤백
-            PREV_FIDA_IMAGE=$(cat /tmp/fida-prev-image 2>/dev/null || echo "")
-            PREV_PLAYWRIGHT_IMAGE=$(cat /tmp/fida-playwright-prev-image 2>/dev/null || echo "")
+            PREV_FIDA_IMAGE=$(cat .prev-fida-image 2>/dev/null || echo "")
+            PREV_PLAYWRIGHT_IMAGE=$(cat .prev-playwright-image 2>/dev/null || echo "")
             if [ -n "$PREV_FIDA_IMAGE" ] && [ -n "$PREV_PLAYWRIGHT_IMAGE" ]; then
               echo "✗ 헬스체크 실패 — 이전 이미지로 롤백: $PREV_FIDA_IMAGE / $PREV_PLAYWRIGHT_IMAGE"
               export FIDA_IMAGE="$PREV_FIDA_IMAGE"

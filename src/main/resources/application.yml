@@ -60,4 +60,4 @@ telegram:
 logging:
   level:
     root: INFO
-    com.fida: DEBUG
+    com.fida: INFO   # 운영 기본값 — 로컬은 application-local.yml에서 DEBUG

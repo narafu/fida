@@ -1,13 +1,13 @@
 name: CI
 
+# main push는 server-deploy.yml verify 잡이 전체 테스트를 돌리므로 PR만 — 중복 실행 방지
 on:
-  push:
-    branches: [main]
   pull_request:
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 

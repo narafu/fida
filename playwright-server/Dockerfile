@@ -18,6 +18,9 @@ RUN npm ci --omit=dev
 
 COPY . .
 
+# Chromium을 root로 돌리지 않도록 node 이미지 기본 비특권 사용자로 실행
+USER node
+
 EXPOSE 3000
 
 CMD ["node", "scrape-server.js"]

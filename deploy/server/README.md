@@ -103,6 +103,17 @@ sudo chown 100:101 /opt/fida/.fida-state
 
 **최초 배포 후 수동 스모크 권장**: `playwright-server/Dockerfile`이 Puppeteer 번들 Chrome 대신 시스템 Chromium(apt 설치, arm64 지원)을 쓰도록 전환됐다 — 번들 Chrome-for-Testing과 버전이 다르므로, 첫 배포 직후 실제 스크래핑 1회(수동 `workflow_dispatch` 또는 서버에서 직접 트리거)로 정상 동작을 확인할 것.
 
+## 수동 트리거
+
+Caddy는 `/actuator/health`만 외부에 공개하고 나머지 경로는 404를 반환한다(주문 트리거·swagger 무인증 노출 차단). 수동 실행은 서버에서 컨테이너 내부로 호출한다:
+
+```bash
+# 전체 파이프라인
+docker exec fida wget -qO- --post-data= http://localhost:7070/api/fida/orders
+# swagger 등 브라우저 접근이 필요하면 SSH 터널 (fida는 호스트 포트를 열지 않으므로 컨테이너 IP 경유)
+ssh -L 7070:$(ssh <server> "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' fida"):7070 <server>
+```
+
 ## 롤백 Runbook
 
 **자동 롤백**: 헬스 게이트 실패 시 Actions가 이전 이미지로 자동 복구.

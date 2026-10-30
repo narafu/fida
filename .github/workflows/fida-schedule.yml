@@ -19,25 +19,36 @@ jobs:
             fida-gemini-quota-
 
       - name: service-account.json 생성
+        # secret은 run 스크립트에 직접 보간하지 않고 env로 전달 — 특수문자 셸 해석·개행 혼입 방지
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON_B64: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON_B64 }}
         run: |
           mkdir -p secrets
           mkdir -p .fida-state
           # 컨테이너는 non-root appuser(러너와 다른 UID)로 실행 — 복원된 quota 파일 포함 쓰기 권한 부여
           chmod -R a+rwX .fida-state
-          echo "${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON_B64 }}" | base64 -d > secrets/service-account.json
+          printf '%s' "$GOOGLE_SERVICE_ACCOUNT_JSON_B64" | base64 -d > secrets/service-account.json
 
       - name: .env 파일 생성
+        # secret은 env로 전달하고 printf로 한 줄씩 기록 — echo 보간 시 특수문자 해석·개행 누락으로 변수가 합쳐지는 사고(2026-08-04) 방지
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          FANDING_EMAIL: ${{ secrets.FANDING_EMAIL }}
+          FANDING_PASSWORD: ${{ secrets.FANDING_PASSWORD }}
+          GOOGLE_SHEETS_SPREADSHEET_ID: ${{ secrets.GOOGLE_SHEETS_SPREADSHEET_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          INTERNAL_API_TOKEN: ${{ secrets.INTERNAL_API_TOKEN }}
+          KISTA_URL: ${{ secrets.KISTA_URL }}
         run: |
-          echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> .env
-          echo "FANDING_EMAIL=${{ secrets.FANDING_EMAIL }}" >> .env
-          echo "FANDING_PASSWORD=${{ secrets.FANDING_PASSWORD }}" >> .env
-          echo "GOOGLE_SHEETS_SPREADSHEET_ID=${{ secrets.GOOGLE_SHEETS_SPREADSHEET_ID }}" >> .env
-          echo "GOOGLE_SERVICE_ACCOUNT_JSON_PATH=/secrets/service-account.json" >> .env
-          echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" >> .env
-          echo "TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}" >> .env
-          echo "INTERNAL_API_TOKEN=${{ secrets.INTERNAL_API_TOKEN }}" >> .env
-          echo "GEMINI_QUOTA_USAGE_PATH=/state/gemini-quota-usage.json" >> .env
-          echo "KISTA_URL=${{ secrets.KISTA_URL }}" >> .env
+          {
+            for k in GEMINI_API_KEY FANDING_EMAIL FANDING_PASSWORD GOOGLE_SHEETS_SPREADSHEET_ID TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID INTERNAL_API_TOKEN; do
+              printf '%s=%s\n' "$k" "${!k}"
+            done
+            printf '%s\n' GOOGLE_SERVICE_ACCOUNT_JSON_PATH=/secrets/service-account.json GEMINI_QUOTA_USAGE_PATH=/state/gemini-quota-usage.json
+            # 미등록 secret의 빈 값이 application.yml 기본값을 덮어쓰지 않도록 값이 있을 때만 기록
+            if [ -n "$KISTA_URL" ]; then printf 'KISTA_URL=%s\n' "$KISTA_URL"; fi
+          } > .env
 
       - name: FIDA 실행
         run: |

@@ -1,13 +1,20 @@
 {$FIDA_DOMAIN} {
 	encode zstd gzip
 
-	reverse_proxy fida:7070 {
-		# 컨테이너 재시작 공백 동안 클라이언트 요청 재시도
-		lb_try_duration 120s
-		lb_try_interval 500ms
+	# 외부 공개는 헬스체크(UptimeRobot)만 — 주문 트리거·swagger·actuator 나머지는 서버 내부에서만 호출 (README 수동 트리거 참조)
+	handle /actuator/health {
+		reverse_proxy fida:7070 {
+			# 컨테이너 재시작 공백 동안 클라이언트 요청 재시도
+			lb_try_duration 120s
+			lb_try_interval 500ms
 
-		health_uri      /actuator/health
-		health_interval 10s
-		health_timeout  5s
+			health_uri      /actuator/health
+			health_interval 10s
+			health_timeout  5s
+		}
+	}
+
+	handle {
+		respond 404
 	}
 }

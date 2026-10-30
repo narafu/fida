@@ -1,0 +1,7 @@
+# 허용 목록 방식 — Dockerfile이 COPY하는 경로만 빌드 컨텍스트에 포함 (.env·secrets/·.git 유입 차단)
+*
+!gradle/
+!gradlew
+!settings.gradle.kts
+!build.gradle.kts
+!src/
