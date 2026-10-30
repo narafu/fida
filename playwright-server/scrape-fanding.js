@@ -68,18 +68,15 @@ if (!EMAIL || !PASSWORD) {
     await page.goto('https://fanding.kr/@laofus/series/1933/', { waitUntil: 'networkidle2' });
     await sleep(1000);
 
-    // 무한스크롤: 새 링크가 더 이상 늘지 않을 때까지 스크롤
-    let prevCount = 0;
-    for (let i = 0; i < 30; i++) {
-      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await sleep(700);
-      const count = await page.evaluate(() =>
-        new Set(Array.from(document.querySelectorAll('a[href*="/@laofus/post/"]')).map(a => a.href)).size
-      );
-      if (count === prevCount) break;
-      prevCount = count;
-    }
-    log(`STEP 2: 게시글 링크 ${prevCount}개 수집`);
+    // 스크롤 없이 첫 화면만 사용 — 시리즈 목록은 기본 최신순(post_list API sOrderOption=desc)이라
+    // 첫 화면 20개에 최신글이 항상 포함됨. 전체 무한스크롤은 ~52s·Chromium 메모리 ~1.8GiB를 유발했음
+    // ponytail: 기본 정렬이 오래된순으로 바뀌면 오판 — 그때는 post_list API를 sOrderOption=desc로 직접 호출
+    // 목록 렌더링 대기 — "첫 화 보기" 링크(옛 글)만 먼저 뜬 상태에서 판별하면 옛 글을 최신으로 오판
+    const linkCount = await (await page.waitForFunction(() => {
+      const n = new Set(Array.from(document.querySelectorAll('a[href*="/@laofus/post/"]')).map(a => a.href)).size;
+      return n > 1 ? n : 0;
+    }, { timeout: 15000 })).jsonValue();
+    log(`STEP 2: 게시글 링크 ${linkCount}개 수집`);
 
     // 최신글 URL 추출 (가장 높은 post ID = 최신)
     const latestPostUrl = await page.evaluate(() => {
