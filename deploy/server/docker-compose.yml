@@ -25,7 +25,7 @@ services:
     environment:
       FANDING_EMAIL: ${FANDING_EMAIL}
       FANDING_PASSWORD: ${FANDING_PASSWORD}
-    mem_limit: 1536m   # Chromium 폭주 시 호스트 보호 (Chromium은 비root·--no-sandbox라 기본 seccomp로 동작)
+    # mem_limit 두지 않음 — 시리즈 페이지 무한 스크롤에서 Chromium 피크 ~1.8GiB, 1536m 제한 시 OOM으로 스크래핑 실패(2026-10-31)
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
       interval: 30s
