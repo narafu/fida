@@ -34,3 +34,4 @@
 ## 인바운드 스케줄 레이어
 
 - `FandingScheduler`: `@Profile("!job")` 및 `fida.scheduler.enabled=true`일 때만 활성화. OCI 상시 기동 서버에서의 정식 자동 실행 경로이며, `FIDA_SCHEDULER_ENABLED`(기본 `true`)로 제어
+- 07:00 실행 실패 시 `TaskScheduler`로 20분 후 1회만 재시도(07:00 기동 시점 기준 07:20, 재시도 실패는 알림만, 추가 예약 없음). 예약은 메모리상이라 대기 중 재기동·배포 시 유실 — 배포 가드(06:50~07:45 KST)가 유일한 보호

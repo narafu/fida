@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -159,6 +160,53 @@ class TradingRecordServiceTest {
         var inOrder = inOrder(sheetPort, kistaPort);
         inOrder.verify(sheetPort).update(any());
         inOrder.verify(kistaPort).sendOrders(any());
+    }
+
+    @Test
+    @DisplayName("sheet.update 실패해도 notify와 KISTA 전송은 수행하고 sheet 예외를 전파한다")
+    void process_still_notifies_and_sends_kista_when_sheet_fails() {
+        when(scraperPort.scrape()).thenReturn(samplePost);
+        when(ocrPort.analyze(any())).thenReturn(sampleOrder);
+        var sheetError = new RuntimeException("시트 실패");
+        doThrow(sheetError).when(sheetPort).update(any());
+        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, kistaPort);
+
+        assertThatThrownBy(service::process).isSameAs(sheetError);
+
+        verify(notifyPort).notify(any(TradingRecord.class));
+        verify(kistaPort).sendOrders(any(TradingRecord.class));
+    }
+
+    @Test
+    @DisplayName("notify 실패해도 KISTA 전송은 수행하고 notify 예외를 전파한다")
+    void process_still_sends_kista_when_notify_fails() {
+        when(scraperPort.scrape()).thenReturn(samplePost);
+        when(ocrPort.analyze(any())).thenReturn(sampleOrder);
+        var notifyError = new RuntimeException("알림 실패");
+        doThrow(notifyError).when(notifyPort).notify(any());
+        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, kistaPort);
+
+        assertThatThrownBy(service::process).isSameAs(notifyError);
+
+        verify(sheetPort).update(any(TradingRecord.class));
+        verify(kistaPort).sendOrders(any(TradingRecord.class));
+    }
+
+    @Test
+    @DisplayName("sheet와 notify 모두 실패하면 sheet 예외를 전파하고 notify 예외는 suppressed에 담는다")
+    void process_rethrows_sheet_error_with_notify_error_suppressed() {
+        when(scraperPort.scrape()).thenReturn(samplePost);
+        when(ocrPort.analyze(any())).thenReturn(sampleOrder);
+        var sheetError = new RuntimeException("시트 실패");
+        var notifyError = new RuntimeException("알림 실패");
+        doThrow(sheetError).when(sheetPort).update(any());
+        doThrow(notifyError).when(notifyPort).notify(any());
+        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, kistaPort);
+
+        assertThatThrownBy(service::process).isSameAs(sheetError);
+
+        assertThat(sheetError.getSuppressed()).containsExactly(notifyError);
+        verify(kistaPort).sendOrders(any(TradingRecord.class));
     }
 
     @Test

@@ -247,6 +247,18 @@ class KistaAdapterTest {
     }
 
     @Test
+    @DisplayName("응답 orders가 null이면 IllegalStateException을 던진다")
+    void sendOrders_throws_when_response_orders_is_null() {
+        when(restTemplate.postForObject(eq(EXPECTED_URL), any(), eq(KistaOrderResponse.class)))
+                .thenReturn(new KistaOrderResponse(SAVED_ID, TRADE_DATE,
+                        "SOXL", BigDecimal.ZERO, BigDecimal.ZERO, null, 0, null));
+
+        assertThatThrownBy(() -> adapter.sendOrders(recordWith(List.of(), List.of())))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("orders");
+    }
+
+    @Test
     @DisplayName("응답 orders 수가 다르면 IllegalStateException을 던진다")
     void sendOrders_throws_when_response_orders_size_mismatches() {
         var extraOrder = new Order(Order.OrderType.LIMIT, Order.OrderDirection.BUY, 1, BigDecimal.TEN);

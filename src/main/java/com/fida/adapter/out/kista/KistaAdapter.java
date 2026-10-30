@@ -36,6 +36,9 @@ public class KistaAdapter implements KistaPort {
         if (response == null) {
             throw new IllegalStateException("KISTA 응답이 null입니다");
         }
+        if (response.orders() == null) {
+            throw new IllegalStateException("KISTA 응답 orders가 null입니다");
+        }
         validate(request, response);
         return new KistaResult(response.id(), response.releaseDate(), response.ticker(),
                 response.currentCycleStart(), response.currentCycleRealizedPnl(),
