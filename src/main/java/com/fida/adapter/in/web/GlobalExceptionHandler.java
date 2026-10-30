@@ -56,7 +56,7 @@ public class GlobalExceptionHandler {
         return detail;
     }
 
-    // OCR 실패 — GeminiVisionAdapter가 이미 notifyGeminiError로 알림 전송하므로 상태 변환만 수행
+    // OCR 실패 — GeminiClient·GeminiVisionAdapter가 이미 notifyGeminiError로 알림 전송하므로 상태 변환만 수행
     @ExceptionHandler(OcrException.class)
     public ProblemDetail handleOcr(OcrException ex) {
         log.warn("OcrException: {}", ex.getMessage());

@@ -8,7 +8,9 @@ import org.springframework.stereotype.Component;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.function.Supplier;
 
 @Slf4j
@@ -23,10 +25,13 @@ public class GeminiQuotaTracker {
     @Value("${gemini.quota-usage-path:/tmp/fida-gemini-quota-usage.json}")
     private String usagePath = "/tmp/fida-gemini-quota-usage.json"; // 일일 사용량 저장 파일
 
-    private final Supplier<LocalDate> todaySupplier;
+    // Gemini 일일 한도는 태평양 시간 자정에 리셋 — JVM 시간대(KST)가 아닌 리셋 기준 날짜로 사용량을 나눈다
+    private static final ZoneId QUOTA_RESET_ZONE = ZoneId.of("America/Los_Angeles");
+
+    private final Supplier<LocalDate> todaySupplier; // 사용량 날짜 키 공급자
 
     public GeminiQuotaTracker() {
-        this.todaySupplier = LocalDate::now;
+        this.todaySupplier = () -> LocalDate.now(QUOTA_RESET_ZONE);
     }
 
     GeminiQuotaTracker(Path usagePath, int dailyLimit, Supplier<LocalDate> todaySupplier) {
@@ -63,7 +68,10 @@ public class GeminiQuotaTracker {
             if (parent != null) {
                 Files.createDirectories(parent);
             }
-            objectMapper.writeValue(path.toFile(), state);
+            // 임시 파일에 쓴 뒤 원자적으로 교체 — 쓰기 도중 중단돼도 기존 파일이 깨지지 않게 한다
+            Path tmp = path.resolveSibling(path.getFileName() + ".tmp");
+            objectMapper.writeValue(tmp.toFile(), state);
+            Files.move(tmp, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } catch (Exception e) {
             // Quota 알림은 관측 보조 기능이므로 본 처리 실패 원인이 되면 안 되지만, 무음 실패는 원인 파악을 막으므로 로그는 남긴다.
             log.warn("Gemini quota 상태 파일 쓰기 실패 (path={}): {}", path, e.getMessage());

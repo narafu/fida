@@ -7,7 +7,7 @@
 | 수정 파일 | 함께 수정 필요 |
 |-----------|---------------|
 | `domain/model` 필드 변경 | 관련 Port, TradingRecordService, 연관 Adapter |
-| `ParsedOrder` 필드 변경 | `GeminiVisionAdapter` 파싱 로직 동기화 |
+| `ParsedOrder` 필드 변경 | `OcrResultReconciler` 보정 로직 동기화 |
 | `TradingRecord` 필드 변경 | `GoogleSheetsAdapter`, `TelegramAdapter` 메시지 포맷 |
 | 새 환경변수 추가 | `.env.example` 반드시 업데이트 |
 | 옵셔널 아웃바운드 어댑터 추가 | `application.yml`에 `url: ${VAR:}` 추가 + `@ConditionalOnProperty("x.url")` + 포트를 `Optional<XxxPort>`로 주입 |
@@ -18,11 +18,12 @@
 
 ## 아웃바운드 OCR
 
-- `GeminiVisionAdapter`: HTTP 429 quota exceeded는 `OcrException("Gemini API 일일한도 초과")`로 분류하고, 기존 Gemini 오류 알림 동작은 유지
+- 구조: `GeminiClient`(프롬프트·HTTP 1회 호출·quota·오류 분류, 503만 원본 예외로 전파) / `GeminiResponseParser`(텍스트→DTO) / `OcrResultReconciler`(순수 보정·경고 수집) / `GeminiVisionAdapter`(3회 재시도 루프, 최종 채택 결과의 경고만 알림)
+- `GeminiClient`: HTTP 429 quota exceeded는 `OcrException("Gemini API 일일한도 초과")`로 분류하고, 기존 Gemini 오류 알림 동작은 유지
 - 매도 OCR은 `sell_rows`에 빈 행을 포함한 물리적 3개 행을 순서대로 유지하고, 정규화된 `sell`이 비었을 때만 값이 있는 행을 폴백으로 사용
-- `sell`이 비어있지 않아도 `sell_rows`의 유효 행 수가 더 많으면(부분 누락) `sell_rows` 전체로 대체 — `GeminiVisionAdapter.resolveSellOrders()` 참조
+- `sell`이 비어있지 않아도 `sell_rows`의 유효 행 수가 더 많으면(부분 누락) `sell_rows` 전체로 대체 — `OcrResultReconciler.resolveSellOrders()` 참조
 - 프롬프트는 화면 위치가 아닌 라벨 텍스트 기준으로 작성 — fanding 매매표 레이아웃이 바뀌어도 위치 힌트가 엉뚱한 행(예: 하단 왼쪽 "누적실현수익")을 가리키지 않게 하기 위함
-- 보유수량은 `holding_qty`·`cumulative_qty` 두 후보로만 결정(`resolveHoldings()`), 배율 검증 없는 `holdings` 필드는 폐기. 수량 후보는 `BigDecimal`로 받아 소수 값(금액 오독)이면 제외 + OCR 경고
+- 보유수량은 `holding_qty`·`cumulative_qty` 두 후보로만 결정(`OcrResultReconciler.resolveHoldings()`), 배율 검증 없는 `holdings` 필드는 폐기. 수량 후보는 `BigDecimal`로 받아 소수 값(금액 오독)이면 제외 + OCR 경고
 - 요청은 JSON 모드(`generationConfig.responseMimeType=application/json`) — 코드펜스·한글 후처리는 방어적으로 유지
 
 ## 인바운드 웹 레이어

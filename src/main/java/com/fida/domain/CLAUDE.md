@@ -25,5 +25,5 @@
 | 변경 대상 | 동기화 필요 |
 |-----------|------------|
 | `domain/model` 필드 | 관련 Port, `TradingRecordService`, 연관 Adapter |
-| `ParsedOrder` 필드 | `GeminiVisionAdapter` 파싱 로직 |
+| `ParsedOrder` 필드 | `OcrResultReconciler` 보정 로직 |
 | `TradingRecord` 필드 | `GoogleSheetsAdapter`, `TelegramAdapter` 메시지 포맷 |

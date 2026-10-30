@@ -50,10 +50,11 @@ class GeminiVisionAdapterTest {
         restTemplate = new RestTemplate();
         mockServer = MockRestServiceServer.createServer(restTemplate);
         notifyPort = mock(NotifyPort.class);
-        adapter = new GeminiVisionAdapter(restTemplate, notifyPort,
+        GeminiClient client = new GeminiClient(restTemplate, notifyPort,
                 new GeminiQuotaTracker(Path.of(System.getProperty("java.io.tmpdir"),
                         "fida-gemini-quota-test-" + System.nanoTime() + ".json"), 20, java.time.LocalDate::now));
-        ReflectionTestUtils.setField(adapter, "apiKey", API_KEY);
+        ReflectionTestUtils.setField(client, "apiKey", API_KEY);
+        adapter = new GeminiVisionAdapter(client, notifyPort);
         ReflectionTestUtils.setField(adapter, "retryDelayMs", 0L); // 테스트에서 대기 시간 제거
     }
 
@@ -131,11 +132,8 @@ class GeminiVisionAdapterTest {
 
     @Test
     @DisplayName("holdings 프롬프트는 누적개수를 보유 수량 후보로 안내한다")
-    void prompt_includes_cumulative_holdings_guidance() throws Exception {
-        var promptField = GeminiVisionAdapter.class.getDeclaredField("PROMPT");
-        promptField.setAccessible(true);
-
-        String prompt = (String) promptField.get(null);
+    void prompt_includes_cumulative_holdings_guidance() {
+        String prompt = GeminiClient.PROMPT;
 
         assertThat(prompt).contains("누적개수");
     }
@@ -145,10 +143,7 @@ class GeminiVisionAdapterTest {
     void prompt_excludes_summary_row_current_cycle_fraction_from_capital_rows() throws Exception {
         // 운영 사례(2026-08-14): 맨 위 요약줄 "현사이클시작 | 7/10"(분수, 금액 아님)이
         // capital_rows에 잘못 섞여 들어가 "7/10"이 710으로 오파싱되고 A8에 잘못 기록됨
-        var promptField = GeminiVisionAdapter.class.getDeclaredField("PROMPT");
-        promptField.setAccessible(true);
-
-        String prompt = (String) promptField.get(null);
+        String prompt = GeminiClient.PROMPT;
 
         assertThat(prompt).contains("분수 형태").contains("capital_rows에 절대 포함하지 말 것");
     }
@@ -422,11 +417,8 @@ class GeminiVisionAdapterTest {
 
     @Test
     @DisplayName("프롬프트는 누적실현수익 등 금액을 수량 필드에 넣지 않도록 안내한다")
-    void prompt_forbids_amounts_in_quantity_fields() throws Exception {
-        var promptField = GeminiVisionAdapter.class.getDeclaredField("PROMPT");
-        promptField.setAccessible(true);
-
-        String prompt = (String) promptField.get(null);
+    void prompt_forbids_amounts_in_quantity_fields() {
+        String prompt = GeminiClient.PROMPT;
 
         assertThat(prompt)
                 .contains("수량 필드에 절대 넣지 말 것")
@@ -669,6 +661,36 @@ class GeminiVisionAdapterTest {
                 .hasMessageContaining("Gemini JSON 파싱 실패")
                 .hasMessageContaining("line 1");
         mockServer.verify();
+        verify(notifyPort, times(1)).notifyGeminiError(any(Exception.class));
+    }
+
+    @Test
+    @DisplayName("holdings 누락 의심 결과를 확보한 뒤 재요청이 503으로 끝나면 확보한 결과를 반환한다")
+    void analyze_returns_suspicious_result_when_later_attempts_fail_with_503() {
+        String incomplete = """
+                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[{\\"price\\":152.95,\\"qty\\":7}],\\"holding_qty\\":0}"}]}}]}
+                """;
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
+                .andRespond(withSuccess(incomplete, MediaType.APPLICATION_JSON));
+        for (int i = 0; i < 2; i++) {
+            mockServer.expect(requestTo(GEMINI_ENDPOINT))
+                    .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+        }
+
+        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
+
+        assertThat(result.sellOrders()).hasSize(1);
+        mockServer.verify();
+        verify(notifyPort, times(0)).notifyGeminiError(any());
+    }
+
+    @Test
+    @DisplayName("이미지가 없으면 Gemini를 호출하지 않고 거부한다")
+    void analyze_rejects_empty_images_without_calling_gemini() {
+        assertThatThrownBy(() -> adapter.analyze(List.of()))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        mockServer.verify(); // 기대 요청 없음 — 호출되면 실패
     }
 
     @Test
