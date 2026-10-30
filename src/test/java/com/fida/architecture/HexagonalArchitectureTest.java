@@ -21,7 +21,7 @@ class HexagonalArchitectureTest {
     }
 
     @Test
-    @DisplayName("도메인은 어떤 외부 레이어도 의존하지 않는다")
+    @DisplayName("도메인은 외부 레이어와 Spring에 의존하지 않는다")
     void domain_must_not_depend_on_outer_layers() {
         ArchRule rule = noClasses()
                 .that().resideInAPackage("com.fida.domain..")
@@ -29,7 +29,7 @@ class HexagonalArchitectureTest {
                 .resideInAnyPackage(
                         "com.fida.application..",
                         "com.fida.adapter..",
-                        "org.springframework.stereotype.."
+                        "org.springframework.."
                 );
         rule.check(classes);
     }
@@ -41,6 +41,16 @@ class HexagonalArchitectureTest {
                 .that().resideInAPackage("com.fida.adapter.in..")
                 .should().dependOnClassesThat()
                 .resideInAPackage("com.fida.application..");
+        rule.check(classes);
+    }
+
+    @Test
+    @DisplayName("인바운드 어댑터는 아웃바운드 어댑터에 직접 의존하지 않는다")
+    void inbound_adapters_must_not_depend_on_outbound_adapters() {
+        ArchRule rule = noClasses()
+                .that().resideInAPackage("com.fida.adapter.in..")
+                .should().dependOnClassesThat()
+                .resideInAPackage("com.fida.adapter.out..");
         rule.check(classes);
     }
 

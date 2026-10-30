@@ -1,5 +1,6 @@
 package com.fida.adapter.out.notify;
 
+import com.fida.domain.exception.NotifyException;
 import com.fida.domain.model.OrderItem;
 import com.fida.domain.model.TradingRecord;
 import com.fida.domain.port.out.NotifyPort;

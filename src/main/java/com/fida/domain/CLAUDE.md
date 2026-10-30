@@ -9,7 +9,6 @@
 |-----------|------|
 | `ProcessTradingRecordUseCase` | 전체 파이프라인 (스크래핑 → OCR → 기록 → 알림 → KISTA) |
 | `ProcessImagesUseCase` | 이미지 직접 업로드 파이프라인 |
-| `ProcessUrlUseCase` | URL 기반 파이프라인 |
 
 ## Port 인터페이스 (port/out)
 

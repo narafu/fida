@@ -2,20 +2,25 @@ package com.fida.adapter.in.web;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fida.adapter.out.ocr.OcrException;
-import com.fida.adapter.out.scraper.ScraperException;
+import com.fida.domain.exception.OcrException;
+import com.fida.domain.exception.ScraperException;
+import com.fida.domain.exception.SheetException;
+import com.fida.domain.exception.NotifyException;
 import com.fida.domain.port.out.NotifyPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.TypeMismatchException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
-import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.multipart.MultipartException;
 
-import java.util.NoSuchElementException;
+import java.io.IOException;
 
 @Slf4j
 @RestControllerAdvice
@@ -23,26 +28,6 @@ import java.util.NoSuchElementException;
 public class GlobalExceptionHandler {
 
     private final NotifyPort notifyPort;
-
-    @ExceptionHandler(NoSuchElementException.class)
-    public ProblemDetail handleNotFound(NoSuchElementException ex) {
-        safeNotify("HTTP 404", ex);
-        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
-        detail.setTitle("Resource Not Found");
-        return detail;
-    }
-
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ProblemDetail handleValidation(MethodArgumentNotValidException ex) {
-        String message = ex.getBindingResult().getFieldErrors().stream()
-                .map(e -> e.getField() + ": " + e.getDefaultMessage())
-                .toList()
-                .toString();
-        safeNotify("HTTP validation", ex);
-        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, message);
-        detail.setTitle("Validation Failed");
-        return detail;
-    }
 
     @ExceptionHandler(ScraperException.class)
     public ProblemDetail handleScraper(ScraperException ex) {
@@ -105,6 +90,41 @@ public class GlobalExceptionHandler {
         safeNotify("HTTP external network", ex);
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
         detail.setTitle("External API Unavailable");
+        return detail;
+    }
+
+    // 시트 기록 실패 — 503 + 텔레그램 알림
+    @ExceptionHandler(SheetException.class)
+    public ProblemDetail handleSheet(SheetException ex) {
+        log.warn("SheetException: {}", ex.getMessage(), ex);
+        safeNotify("HTTP sheet", ex);
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+        detail.setTitle("Sheet Unavailable");
+        return detail;
+    }
+
+    // 텔레그램 자체 실패 — 알림 채널이 죽었으므로 재알림 없이 로그만
+    @ExceptionHandler(NotifyException.class)
+    public ProblemDetail handleNotify(NotifyException ex) {
+        log.error("NotifyException: {}", ex.getMessage(), ex);
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+        detail.setTitle("Notify Unavailable");
+        return detail;
+    }
+
+    // 그 외 예외 — 500 + 텔레그램 알림
+    @ExceptionHandler(Exception.class)
+    public ProblemDetail handleUnexpected(Exception ex) throws Exception {
+        // Spring MVC 표준 요청 오류·클라이언트 연결 끊김은 다시 던져 DefaultHandlerExceptionResolver가 원래 4xx 상태·헤더로 처리하게 함
+        if (ex instanceof ErrorResponse || ex instanceof TypeMismatchException
+                || ex instanceof HttpMessageNotReadableException || ex instanceof MultipartException
+                || ex instanceof IOException) {
+            throw ex;
+        }
+        log.error("Unexpected exception: {}", ex.getMessage(), ex);
+        safeNotify("HTTP unexpected", ex);
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage());
+        detail.setTitle("Internal Server Error");
         return detail;
     }
 

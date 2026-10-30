@@ -26,12 +26,10 @@ repositories {
 dependencies {
     // Spring Boot Core
     implementation(libs.spring.boot.starter.web)
-    implementation(libs.spring.boot.starter.validation)
     implementation(libs.spring.boot.starter.actuator)
 
     // Google Sheets & Auth
     implementation(libs.google.api.client)
-    implementation(libs.google.oauth.client.jetty)
     implementation(libs.google.apis.sheets)
 
     // API Documentation

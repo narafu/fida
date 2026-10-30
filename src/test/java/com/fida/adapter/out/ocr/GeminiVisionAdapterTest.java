@@ -1,5 +1,6 @@
 package com.fida.adapter.out.ocr;
 
+import com.fida.domain.exception.OcrException;
 import com.fida.domain.model.OrderItem;
 import com.fida.domain.model.ParsedOrder;
 import com.fida.domain.port.out.NotifyPort;

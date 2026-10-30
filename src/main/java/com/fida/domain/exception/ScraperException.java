@@ -1,4 +1,4 @@
-package com.fida.adapter.out.scraper;
+package com.fida.domain.exception;
 
 public class ScraperException extends RuntimeException {
     public ScraperException(String message) {

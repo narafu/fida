@@ -1,5 +1,6 @@
 package com.fida.adapter.out.scraper;
 
+import com.fida.domain.exception.ScraperException;
 import com.fida.domain.model.ScrapedPost;
 import com.fida.domain.port.out.ScraperPort;
 import lombok.RequiredArgsConstructor;
@@ -57,16 +58,37 @@ public class FandingScraperAdapter implements ScraperPort {
             int count = response.images() == null ? 0 : response.images().size();
             throw new ScraperException("매매표 이미지(" + (TRADE_TABLE_IMAGE_INDEX + 1) + "번째) 없음: 이미지 " + count + "개");
         }
-        List<byte[]> images = List.of(
-                Base64.getDecoder().decode(response.images().get(TRADE_TABLE_IMAGE_INDEX).base64()));
+        List<byte[]> images = List.of(decodeImage(response.images().get(TRADE_TABLE_IMAGE_INDEX)));
         LocalDate postDate = resolveDateFromTitle(response.postTitle());
-        if (postDate == null && response.postDate() != null) {
-            postDate = LocalDate.parse(response.postDate());
+        if (postDate == null) {
+            postDate = parsePostDate(response.postDate());
         }
         if (postDate == null) {
             postDate = LocalDate.now();
         }
         return new ScrapedPost(response.postTitle(), postDate, response.postUrl(), images);
+    }
+
+    private byte[] decodeImage(ImageData image) {
+        if (image == null || image.base64() == null) {
+            throw new ScraperException("매매표 이미지 데이터 없음");
+        }
+        try {
+            return Base64.getDecoder().decode(image.base64());
+        } catch (IllegalArgumentException e) {
+            throw new ScraperException("매매표 이미지 Base64 디코딩 실패", e);
+        }
+    }
+
+    // 날짜 2순위 — 파싱 불가면 3순위(오늘)로 넘김
+    private LocalDate parsePostDate(String postDate) {
+        if (postDate == null) return null;
+        try {
+            return LocalDate.parse(postDate);
+        } catch (DateTimeException e) {
+            log.warn("postDate 파싱 실패, 오늘 날짜로 대체: {}", postDate);
+            return null;
+        }
     }
 
     private static final Pattern TITLE_DATE_PATTERN = Pattern.compile("(\\d{1,2})/(\\d{1,2})");

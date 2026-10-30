@@ -5,7 +5,7 @@
  *
  * 실행: FANDING_EMAIL=... FANDING_PASSWORD=... node scrape-server.js
  * 포트: 3000
- * 엔드포인트: GET /scrape, GET /scrape-url?url=, GET /health
+ * 엔드포인트: GET /scrape, GET /health
  */
 
 const http = require('http');
@@ -26,29 +26,7 @@ const server = http.createServer((req, res) => {
   }
 
   if (req.method === 'GET' && req.url === '/scrape') {
-    runScraper(res, {}, '/scrape');
-    return;
-  }
-
-  if (req.method === 'GET' && req.url.startsWith('/scrape-url')) {
-    const targetUrl = new URL(req.url, 'http://localhost').searchParams.get('url');
-    if (!targetUrl) {
-      respondJson(res, 400, { success: false, error: 'url 파라미터 필요' });
-      return;
-    }
-    // SSRF 방지: fanding.kr의 https URL만 허용
-    try {
-      const u = new URL(targetUrl);
-      const host = u.hostname.toLowerCase().replace(/\.$/, '');
-      if (u.protocol !== 'https:' || host !== 'fanding.kr') {
-        respondJson(res, 400, { success: false, error: 'host not allowed: fanding.kr only' });
-        return;
-      }
-    } catch (_) {
-      respondJson(res, 400, { success: false, error: 'invalid url format' });
-      return;
-    }
-    runScraper(res, { TARGET_URL: targetUrl }, `/scrape-url (${targetUrl})`);
+    runScraper(res, '/scrape');
     return;
   }
 
@@ -57,7 +35,7 @@ const server = http.createServer((req, res) => {
 });
 
 // 자식 프로세스를 비동기로 실행 — 이벤트 루프를 막지 않아 스크래핑 중에도 /health 응답 가능
-function runScraper(res, extraEnv, label) {
+function runScraper(res, label) {
   if (scraping) {
     console.warn(`[${new Date().toISOString()}] ${label} 거부 — 스크래핑 이미 진행 중`);
     respondJson(res, 503, { success: false, error: 'scrape already in progress' });
@@ -68,9 +46,9 @@ function runScraper(res, extraEnv, label) {
   console.log(`[${new Date().toISOString()}] ${label} 요청 수신`);
 
   execFile('node', [SCRIPT], {
-    env: { ...process.env, ...extraEnv },
+    env: process.env,
     maxBuffer: 100 * 1024 * 1024,
-    timeout: 120000,
+    timeout: 110000, // Java RestTemplate readTimeout(120s)보다 짧게 — 타임아웃 시 Java가 상세 오류 바디를 받도록
   }, (error, stdout, stderr) => {
     scraping = false;
     const elapsed = ((Date.now() - start) / 1000).toFixed(1);

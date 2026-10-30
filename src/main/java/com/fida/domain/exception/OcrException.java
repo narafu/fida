@@ -1,4 +1,4 @@
-package com.fida.adapter.out.ocr;
+package com.fida.domain.exception;
 
 public class OcrException extends RuntimeException {
     public OcrException(String message) {

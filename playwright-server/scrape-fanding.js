@@ -1,23 +1,22 @@
 #!/usr/bin/env node
 /**
  * scrape-fanding.js
- * fanding.kr에서 라오어 Privacy 시리즈 최신글의 이미지 URL을 추출합니다.
- * n8n Execute Command 노드에서 호출하며, 결과를 JSON으로 stdout 출력합니다.
+ * fanding.kr에서 라오어 Privacy 시리즈 최신글의 본문 이미지를 스크린샷으로 추출합니다.
+ * FIDA playwright-server(scrape-server.js)에서 execFile로 호출하며, 결과를 JSON으로 stdout 출력합니다.
  *
  * 환경변수:
  *   FANDING_EMAIL    - 로그인 이메일
  *   FANDING_PASSWORD - 로그인 비밀번호
  *
  * 출력 JSON:
- *   { success: true, postDate: "YYYY-MM-DD", postUrl: "...", imageUrls: [...], cookies: [...] }
- *   { success: false, error: "..." }
+ *   { success: true, postTitle, postDate: "YYYY-MM-DD", postUrl, images: [{ base64, mimeType }] }
+ *   { success: false, error }
  */
 
 const puppeteer = require('puppeteer');
 
 const EMAIL = process.env.FANDING_EMAIL;
 const PASSWORD = process.env.FANDING_PASSWORD;
-const TARGET_URL = process.env.TARGET_URL; // 지정 시 series 순회 스킵하고 해당 URL로 직접 이동
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (msg) => console.error(`[scraper ${new Date().toISOString()}] ${msg}`);
 
@@ -65,47 +64,41 @@ if (!EMAIL || !PASSWORD) {
     log('STEP 1: 로그인 성공');
 
     // ── STEP 2-3: 최신글 URL 결정 ────────────────────────────────────
-    let latestPostUrl;
-    if (TARGET_URL) {
-      log(`STEP 2: TARGET_URL 모드: ${TARGET_URL}`);
-      latestPostUrl = TARGET_URL;
-    } else {
-      log('STEP 2: Privacy 시리즈 접근');
-      await page.goto('https://fanding.kr/@laofus/series/1933/', { waitUntil: 'networkidle2' });
-      await sleep(1000);
+    log('STEP 2: Privacy 시리즈 접근');
+    await page.goto('https://fanding.kr/@laofus/series/1933/', { waitUntil: 'networkidle2' });
+    await sleep(1000);
 
-      // 무한스크롤: 새 링크가 더 이상 늘지 않을 때까지 스크롤
-      let prevCount = 0;
-      for (let i = 0; i < 30; i++) {
-        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-        await sleep(700);
-        const count = await page.evaluate(() =>
-          new Set(Array.from(document.querySelectorAll('a[href*="/@laofus/post/"]')).map(a => a.href)).size
-        );
-        if (count === prevCount) break;
-        prevCount = count;
-      }
-      log(`STEP 2: 게시글 링크 ${prevCount}개 수집`);
-
-      // 최신글 URL 추출 (가장 높은 post ID = 최신)
-      latestPostUrl = await page.evaluate(() => {
-        const links = [...new Set(
-          Array.from(document.querySelectorAll('a[href*="/@laofus/post/"]')).map(a => a.href)
-        )];
-        // post ID 숫자 기준 내림차순 정렬 → 첫 번째가 최신
-        links.sort((a, b) => {
-          const idA = parseInt(a.match(/\/post\/(\d+)/)?.[1] || '0');
-          const idB = parseInt(b.match(/\/post\/(\d+)/)?.[1] || '0');
-          return idB - idA;
-        });
-        return links[0] || null;
-      });
-
-      if (!latestPostUrl) {
-        throw new Error('라오어 Privacy 최신 게시글을 찾을 수 없습니다.');
-      }
-      log(`STEP 3: 최신 게시글 URL: ${latestPostUrl}`);
+    // 무한스크롤: 새 링크가 더 이상 늘지 않을 때까지 스크롤
+    let prevCount = 0;
+    for (let i = 0; i < 30; i++) {
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await sleep(700);
+      const count = await page.evaluate(() =>
+        new Set(Array.from(document.querySelectorAll('a[href*="/@laofus/post/"]')).map(a => a.href)).size
+      );
+      if (count === prevCount) break;
+      prevCount = count;
     }
+    log(`STEP 2: 게시글 링크 ${prevCount}개 수집`);
+
+    // 최신글 URL 추출 (가장 높은 post ID = 최신)
+    const latestPostUrl = await page.evaluate(() => {
+      const links = [...new Set(
+        Array.from(document.querySelectorAll('a[href*="/@laofus/post/"]')).map(a => a.href)
+      )];
+      // post ID 숫자 기준 내림차순 정렬 → 첫 번째가 최신
+      links.sort((a, b) => {
+        const idA = parseInt(a.match(/\/post\/(\d+)/)?.[1] || '0');
+        const idB = parseInt(b.match(/\/post\/(\d+)/)?.[1] || '0');
+        return idB - idA;
+      });
+      return links[0] || null;
+    });
+
+    if (!latestPostUrl) {
+      throw new Error('라오어 Privacy 최신 게시글을 찾을 수 없습니다.');
+    }
+    log(`STEP 3: 최신 게시글 URL: ${latestPostUrl}`);
 
     // ── STEP 4: 게시글 접속 → 이미지 URL 수집 ─────────────────────
     log('STEP 4: 게시글 접속');
@@ -132,26 +125,13 @@ if (!EMAIL || !PASSWORD) {
     });
     log(`STEP 4: 제목="${postTitle}", 날짜=${postDate}`);
 
-    // 본문 이미지 URL 수집 (selector: img.fd-editor-image, 부모: tiptap ProseMirror)
-    const imageUrls = await page.evaluate(() => {
-      const imgs = Array.from(document.querySelectorAll('img.fd-editor-image'));
-      if (imgs.length > 0) {
-        return imgs.map((img) => img.src).filter(Boolean);
-      }
-      // 폴백: ProseMirror 컨테이너 내 모든 img
-      const editor = document.querySelector('.tiptap.ProseMirror, .fd-editor__content');
-      if (editor) {
-        return Array.from(editor.querySelectorAll('img'))
-          .map((img) => img.src)
-          .filter(Boolean);
-      }
-      return [];
-    });
-
-    if (imageUrls.length === 0) {
-      throw new Error('게시글 본문에서 이미지를 찾을 수 없습니다.');
-    }
-    log(`STEP 4: 이미지 ${imageUrls.length}개 발견`);
+    // 본문 이미지 요소 수집 — fd-editor-image 우선, 없으면 ProseMirror 컨테이너 내 img 폴백
+    const findBodyImages = async () => {
+      const imgs = await page.$$('img.fd-editor-image');
+      if (imgs.length > 0) return imgs;
+      const editor = await page.$('.tiptap.ProseMirror, .fd-editor__content');
+      return editor ? editor.$$('img') : [];
+    };
 
     // ── STEP 4.5: 팝업/모달 닫기 ───────────────────────────────────
     // 운영 사례(2026-08-14): "오늘의 미션" 알림이 메인 문서가 아니라
@@ -184,12 +164,15 @@ if (!EMAIL || !PASSWORD) {
       }
     };
     await closeMissionPopup();
+    // 팝업 닫기 후 수집 — 닫기 과정에서 img 노드가 다시 렌더링되면 이전 핸들이 detach됨
+    const imgHandles = await findBodyImages();
+    if (imgHandles.length === 0) throw new Error('게시글 본문에서 이미지를 찾을 수 없습니다.');
+    log(`STEP 4: 이미지 ${imgHandles.length}개 발견`);
 
     // ── STEP 5: 이미지 요소 스크린샷 (CDN 인증 우회) ───────────────
     // page.goto로 이미지 URL 직접 접근 시 CDN이 차단하므로
     // 렌더링된 img 요소를 Puppeteer로 직접 스크린샷
     log('STEP 5: 이미지 스크린샷 시작');
-    const imgHandles = await page.$$('img.fd-editor-image');
     const images = [];
     for (const handle of imgHandles) {
       await closeMissionPopup();

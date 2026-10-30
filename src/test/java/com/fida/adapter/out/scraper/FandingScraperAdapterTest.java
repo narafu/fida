@@ -1,5 +1,6 @@
 package com.fida.adapter.out.scraper;
 
+import com.fida.domain.exception.ScraperException;
 import com.fida.domain.model.ScrapedPost;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -235,5 +236,33 @@ class FandingScraperAdapterTest {
         var result = adapter.resolveDateFromTitle("Privacy 7/11 _ SOXL 매매기록", LocalDate.of(2026, 7, 10));
 
         assertThat(result).isEqualTo(LocalDate.of(2026, 7, 11));
+    }
+
+    @Test
+    @DisplayName("매매표 이미지 Base64가 손상되면 ScraperException을 던진다")
+    void scrape_throws_on_invalid_base64() {
+        String json = """
+                {"success": true, "postTitle": "Privacy 10/29", "postUrl": "https://fanding.kr/post/1",
+                 "images": [{"base64": "QQ=="}, {"base64": "QQ=="}, {"base64": "!!!"}]}
+                """;
+        mockServer.expect(requestTo(SCRAPER_URL))
+                .andRespond(withSuccess(json, MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> adapter.scrape())
+                .isInstanceOf(ScraperException.class)
+                .hasMessageContaining("Base64");
+    }
+
+    @Test
+    @DisplayName("postDate 형식이 잘못되면 오늘 날짜로 대체한다")
+    void scrape_falls_back_to_today_when_postDate_unparseable() {
+        String json = """
+                {"success": true, "postTitle": "제목", "postDate": "2024.01.15", "postUrl": "https://fanding.kr/post/1",
+                 "images": [{"base64": "QQ=="}, {"base64": "QQ=="}, {"base64": "QQ=="}]}
+                """;
+        mockServer.expect(requestTo(SCRAPER_URL))
+                .andRespond(withSuccess(json, MediaType.APPLICATION_JSON));
+
+        assertThat(adapter.scrape().postDate()).isEqualTo(LocalDate.now());
     }
 }
