@@ -45,3 +45,6 @@ docker-compose.override.yml
 .claude.local.md
 .claude/settings.local.json
 bin
+
+# Node (playwright-server 로컬 디버그용 npm install)
+node_modules/
