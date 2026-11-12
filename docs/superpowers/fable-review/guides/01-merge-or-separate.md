@@ -1,6 +1,6 @@
 # 01. fida를 kista-api에 합칠 것인가
 
-상태: **권고안. 최종 결정은 사용자.** 근거 자료는 `findings/01`~`04`.
+상태: **2026-11-12 사용자 결정: D안(별도 레포 유지 + 접점 축소) 채택.** 근거 자료는 `findings/01`~`04`.
 
 ## 결론
 
@@ -84,7 +84,7 @@ kista-api `guides/05-modules-and-processes.md`의 role은 **같은 Modulith 모�
 그래서 남은 질문은 "코드베이스를 합칠 것인가" 하나다. 레포 분리와 호스트 분리는 별개이고, fida는 평시 0.5GB, 피크 1.5GB를 하루 2분 쓴다(`findings/04`). 운영 호스트로 옮기면:
 
 - fida 자체 Caddy 삭제. 헬스 공개가 필요하면 kista Caddy에 스니펫 1개.
-- `KISTA_URL`을 내부 네트워크 주소로 바꾸면 공인 도메인 왕복과 Caddy 라우팅 의존(2026-09-17 404 사고 원인)이 없어진다.
+- `KISTA_URL`을 내부 네트워크 주소로 바꾸면(infra 안: Caddy 내부 리스너 `http://caddy:8080`, fida 컨테이너는 `shared_net`에만. `kista-infra/.../guides/03-instance-topology.md` 5-4절) 공인 도메인 왕복과 Caddy 라우팅 의존(2026-09-17 404 사고 원인)이 없어진다.
 - fida 배포를 kista-infra `reconcile.sh`에 편입하면 fida `server-deploy.yml`의 SSH 배포·헬스게이트·롤백 약 130줄이 빠진다.
 - 확인할 것: 07:00~07:02 KST에 kista 배치와 메모리 피크가 겹치는지, playwright 컨테이너 `mem_limit`을 유지할지.
 

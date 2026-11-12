@@ -74,7 +74,16 @@
 | 5 | 배포 워크플로의 이미지 정리를 "현재와 직전 버전만 남기기"로 교체. 롤백이 `.prev-*-image`에 적힌 직전 이미지를 쓰므로 그것은 지우지 않는다 | `.github/workflows/server-deploy.yml` 헬스게이트 통과 뒤 단계 | Sonnet | 배포 1회 뒤 서버에서 `docker images \| grep -c fida` 가 4 이하 |
 | 6 | 메모리 정리(승인된 것만), `MEMORY.md` 인덱스 갱신 | 메모리 디렉토리 | Haiku | 인덱스 항목 수와 파일 수 일치 |
 
-fida가 kista-server로 옮겨 kista-infra `reconcile.sh`로 배포되면 5번의 워크플로 수정은 필요 없어진다(그쪽에서 같은 규칙으로 처리, fable-infra에 전달함). 이전 전까지 급한 것은 아래 수동 정리 1회다.
+fida가 kista-server로 옮겨 kista-infra `reconcile.sh`로 배포되면 5번의 워크플로 수정은 필요 없어진다. reconcile은 적용 성공 뒤 실행 중이 아닌 태그를 전부 지우고, 롤백 때는 GHCR에서 다시 받는다(fida 이미지 2개 익명 pull 확인됨, fable-infra 2026-11-12). 이전이 늦어질 때만 아래 수동 정리 1회를 한다.
+
+### 이전 작업 (fida 쪽 몫, fable-infra 지침서 03 4-3절과 짝)
+
+| # | 내용 | 대상 | 모델 | 완료 판정 |
+|---|---|---|---|---|
+| 7 | 배포 금지 창 훅 신설. kista-infra `reconcile.yml`이 앱 레포의 `deploy/hooks/pre-apply.sh`가 있으면 실행한다. 화~토 KST 06:50~07:45이면 exit 1 | `deploy/hooks/pre-apply.sh` (새 파일), `server-deploy.yml`의 가드 로직을 옮겨 옴 | Sonnet | `TZ=Asia/Seoul` 기준 시각을 인자로 받아 판정하는 자체 점검 1개(`bash deploy/hooks/pre-apply.sh --check "2026-11-12 07:10"` 등)가 금지·허용 양쪽을 맞힘 |
+| 8 | 이전 완료 뒤 fida 자체 배포 정리: `server-deploy.yml`의 SSH 배포·헬스게이트·롤백 단계, `deploy/server/Caddyfile`, compose의 caddy 서비스 삭제. `KISTA_URL`을 `http://caddy:8080`으로. `deploy/server/README.md`를 새 구조에 맞게 축소 | 해당 파일들 | Sonnet | 이전 후 첫 07:00 실행에서 KISTA 전송 완료 로그와 heartbeat 핑 |
+
+`/opt/fida/.fida-state/`는 옮기지 않고 새로 시작한다. Gemini quota 파일은 날짜별 카운트라 잃는 것은 이전 당일의 카운트뿐이다. 단 `03` 태스크 3(OCR 보관함 `/state/ocr-archive/`)을 이전 전에 배포했다면 그 디렉토리는 옮긴다. 새 디렉토리도 uid 100:101 소유여야 한다.
 
 5번은 서버에 쌓인 22.9GB를 한 번 비우는 수동 정리(`docker image prune -a`에 실행 중·직전 이미지 제외)와 짝이다. 운영 서버에서 지우는 작업이므로 사용자가 직접 하거나 명시 승인 뒤에 한다.
 
@@ -86,7 +95,7 @@ fida가 kista-server로 옮겨 kista-infra `reconcile.sh`로 배포되면 5번�
 
 ## 범위 밖으로 남기는 질문
 
-- **Google Sheets 기록이 아직 필요한가.** KISTA가 같은 값을 DB에 저장하고 admin 화면으로 보여 준다. 시트 경로는 Java 180줄, Google 의존 2개, 서비스 계정 시크릿, Lazy 3단 설정, uid 소유권 사고(2026-08-04)를 끌고 온다. n8n 시절의 유산이다. 사용자가 시트를 직접 보는지에 달렸으니 사용자가 정한다. 없애기로 하면 `SheetPort`, `GoogleSheetsAdapter`, `GoogleSheetsConfig`, `SheetException`, `secrets/` 마운트, `TradingRecordService`의 명시적 생성자(`@Lazy` 때문에 존재)가 함께 사라진다.
+- **Google Sheets 기록이 아직 필요한가.** (2026-11-12 사용자: 일단 유지, 향후 삭제 고려) KISTA가 같은 값을 DB에 저장하고 admin 화면으로 보여 준다. 시트 경로는 Java 180줄, Google 의존 2개, 서비스 계정 시크릿, Lazy 3단 설정, uid 소유권 사고(2026-08-04)를 끌고 온다. n8n 시절의 유산이다. 사용자가 시트를 직접 보는지에 달렸으니 사용자가 정한다. 없애기로 하면 `SheetPort`, `GoogleSheetsAdapter`, `GoogleSheetsConfig`, `SheetException`, `secrets/` 마운트, `TradingRecordService`의 명시적 생성자(`@Lazy` 때문에 존재)가 함께 사라진다.
 
 ## 의존·순서
 
