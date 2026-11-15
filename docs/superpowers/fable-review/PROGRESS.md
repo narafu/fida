@@ -31,7 +31,8 @@
 3. `04` 태스크 7 (pre-apply 훅) — 완료 (2026-11-15, 커밋 d57e133, `--self-test`는 macOS·ubuntu 양쪽 통과) → infra 이전 → `04` 태스크 8
    - 태스크 8 중 bundle 계약 부분을 이전 전으로 당김 (2026-11-15, 브랜치 `infra-bundle`, main 미병합). `roles`·`images`·`caddy/fida.caddy` 추가, compose에서 caddy 삭제(`shared_net` + 전용 `browser_net`, mem_limit 1024m/2048m), `Caddyfile` 삭제, `server-deploy.yml` SSH 배포를 infra `repository_dispatch`로 교체, README 축소
    - **main 병합 = 컷오버.** 병합하면 구 SSH 배포가 사라지고 infra로 dispatch한다. 이전 당일 사용자 승인 뒤 병합한다. 그 전에 main에 커밋하면 구 SSH 배포가 fida-server에 그대로 나간다(paths 필터 없음)
-   - 병합 전 필요: fida 레포 `vars.INFRA_APP_CLIENT_ID`·`secrets.INFRA_APP_PRIVATE_KEY`, infra `state/fida.yml`(roles 2개)·`secrets/fida.env`(`FANDING_*` 포함), kista-infra bbeed69 push
+   - 병합 전 준비: fida 레포 `vars.INFRA_APP_CLIENT_ID`·`secrets.INFRA_APP_PRIVATE_KEY` 등록 완료(2026-11-15). kista-infra bbeed69는 main에 push됨(rebase 후 5947ac7). 남은 것은 infra 세션 몫이다: `state/fida.yml`(roles 2개), `secrets/fida.env`(`FANDING_*` 포함), service-account.json 이동, ocr-archive(아직 없음, kista-server에 100:101 빈 디렉토리 생성), DNS 전환, 구 서버 fida 정지. 병합 시점은 infra 세션이 알린다
+   - 첫 dispatch에서 확인: fida 커밋에 `deploy/production` status가 붙는지(kista-infra-dispatch App의 fida 설치·statuses 권한)
    - 태스크 8에 남은 것: `KISTA_URL`을 `http://caddy:8080`으로(infra 내부 리스너 배포 뒤, infra 소유 env), playwright `read_only`·`cap_drop: ALL` 검토
 4. ~~`04` 태스크 1~4·6~~ — 완료 (2026-11-15). 루트 `CLAUDE.md` 58줄, 환경변수 기준은 `.env.example`, 승인된 삭제 후보 삭제(`AGENTS.md` 유지), 메모리 3건 삭제
    - `04` 태스크 5: infra 이전이 1~2주 안이라 워크플로 수정은 건너뜀(reconcile.sh가 맡음). 2026-11-15 서버 수동 정리로 실행 중(67b8840)·직전(3562d4a) 이미지만 남기고 fida 태그 42개 삭제. `docker images | grep -c fida` = 4, 디스크 31G에서 8.2G로. 이전이 늦어지면 같은 정리를 다시 한다
