@@ -74,6 +74,8 @@ class OcrArchiveTest {
     @DisplayName("보관 경로가 막혀 있어도 analyze()는 정상 결과를 반환한다")
     void analyze_succeeds_when_archive_path_blocked() throws Exception {
         Path blocker = Files.createFile(tmp.resolve("blocker"));
+        // 막힌 경로에서는 begin()이 예외 없이 null을 반환한다
+        assertThat(archiveAt(blocker.resolve("sub")).begin(List.of(new byte[]{1}))).isNull();
         RestTemplate restTemplate = new RestTemplate();
         MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
         NotifyPort notifyPort = mock(NotifyPort.class);

@@ -10,7 +10,12 @@ final class OcrFixtures {
     private OcrFixtures() {}
 
     static String load(String name) {
-        try (var in = OcrFixtures.class.getResourceAsStream("/ocr/" + name + ".json")) {
+        String path = "/ocr/" + name + ".json";
+        try (var in = OcrFixtures.class.getResourceAsStream(path)) {
+            // 리소스가 없으면 NPE 대신 경로를 알려 준다
+            if (in == null) {
+                throw new IllegalStateException("OCR 픽스처를 찾을 수 없음: " + path);
+            }
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new UncheckedIOException(e);

@@ -141,7 +141,9 @@ final class OcrResultReconciler {
                 .orElse(null);
     }
 
-    private static void checkCurrentCycleStartPlausibility(GeminiOrderResult raw, List<String> warnings, BigDecimal currentCycleStart, int holdings, BigDecimal avgPrice) {
+    private static void checkCurrentCycleStartPlausibility(GeminiOrderResult raw, List<String> warnings,
+                                                           BigDecimal currentCycleStart, int holdings,
+                                                           BigDecimal avgPrice) {
         if (currentCycleStart == null) {
             return;
         }

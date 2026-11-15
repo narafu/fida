@@ -37,6 +37,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
+Gradle 8.14는 JDK 25에서 실행되지 않으므로 시스템 기본 JDK가 25면 gradle 명령 앞에 `JAVA_HOME=$(/usr/libexec/java_home -v 21)`을 붙인다.
+
 ```bash
 bash gradlew build                       # 컴파일 + 테스트 + JAR
 bash gradlew test                        # 전체 테스트 (JUnit 5, 병렬 실행)

@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
@@ -38,13 +39,22 @@ public class OcrArchive {
             purgeExpired(root, now.toLocalDate());
             Path run = createRunDir(root.resolve(now.toLocalDate().toString()),
                     now.format(DateTimeFormatter.ofPattern("HHmmss")));
-            for (int i = 0; i < images.size(); i++) {
-                Files.write(run.resolve("image-" + (i + 1) + ".bin"), images.get(i));
-            }
+            saveImages(run, images);
             return run;
         } catch (Exception e) {
             log.warn("OCR 이미지 보관 실패 — 무시하고 계속: {}", e.toString());
             return null;
+        }
+    }
+
+    // 이미지 저장 중 실패해도 실행 폴더는 유지해 응답 보관은 계속되게 한다
+    private void saveImages(Path run, List<byte[]> images) {
+        try {
+            for (int i = 0; i < images.size(); i++) {
+                Files.write(run.resolve("image-" + (i + 1) + ".bin"), images.get(i));
+            }
+        } catch (Exception e) {
+            log.warn("OCR 이미지 일부 보관 실패 — 응답 보관은 계속: {}", e.toString());
         }
     }
 
@@ -85,6 +95,9 @@ public class OcrArchive {
                     }
                 } catch (DateTimeParseException ignored) {
                     // 날짜 형식이 아닌 폴더는 보존
+                } catch (Exception e) {
+                    // 폴더 하나의 삭제 실패가 나머지 정리를 막지 않게 한다
+                    log.warn("OCR 보관 폴더 정리 실패 {} — 다음 폴더 계속: {}", dir, e.toString());
                 }
             });
         } catch (Exception e) {
@@ -92,11 +105,16 @@ public class OcrArchive {
         }
     }
 
-    private void deleteRecursively(Path dir) {
+    private void deleteRecursively(Path dir) throws IOException {
         try (Stream<Path> walk = Files.walk(dir)) {
-            walk.sorted(Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
-        } catch (IOException e) {
-            log.warn("OCR 보관 폴더 삭제 실패 {} — 무시: {}", dir, e.toString());
+            // 하위 항목부터 삭제 — 실패는 첫 예외로 전파돼 폴더 단위로 한 번만 로그
+            walk.sorted(Comparator.reverseOrder()).forEach(p -> {
+                try {
+                    Files.delete(p);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            });
         }
     }
 }
