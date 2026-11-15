@@ -1,6 +1,5 @@
 package com.fida.application.service;
 
-import com.fida.domain.model.KistaResult;
 import com.fida.domain.model.OrderItem;
 import com.fida.domain.model.ParsedOrder;
 import com.fida.domain.model.ScrapedPost;
@@ -40,16 +39,14 @@ class TradingRecordServiceTest {
             "매매표", LocalDate.of(2024, 1, 15), "https://fanding.kr/1", List.of(new byte[]{1}));
     private final ParsedOrder sampleOrder = new ParsedOrder(
             List.of(), List.of(), null, null, null, 0);
-    private final KistaResult sampleKistaResult = new KistaResult(
-            UUID.fromString("550e8400-e29b-41d4-a716-446655440000"),
-            LocalDate.of(2024, 1, 15), "SOXL", null, null, null, 0, List.of());
+    private final UUID sampleKistaId = UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
 
     @Test
     @DisplayName("process()는 scrape → OCR → sheet 업데이트 → notify 순으로 실행된다")
     void process_executes_full_pipeline_in_order() {
         when(scraperPort.scrape()).thenReturn(samplePost);
         when(ocrPort.analyze(samplePost.images())).thenReturn(sampleOrder);
-        when(kistaPort.sendOrders(any())).thenReturn(sampleKistaResult);
+        when(kistaPort.sendOrders(any())).thenReturn(sampleKistaId);
         var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, kistaPort);
 
         service.process();
@@ -66,7 +63,7 @@ class TradingRecordServiceTest {
     void process_passes_correct_tradingRecord_to_sheet_and_notify() {
         when(scraperPort.scrape()).thenReturn(samplePost);
         when(ocrPort.analyze(any())).thenReturn(sampleOrder);
-        when(kistaPort.sendOrders(any())).thenReturn(sampleKistaResult);
+        when(kistaPort.sendOrders(any())).thenReturn(sampleKistaId);
         var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, kistaPort);
 
         service.process();
@@ -108,7 +105,7 @@ class TradingRecordServiceTest {
     void process_notifies_kista_success_when_sendOrders_succeeds() {
         when(scraperPort.scrape()).thenReturn(samplePost);
         when(ocrPort.analyze(any())).thenReturn(sampleOrder);
-        when(kistaPort.sendOrders(any())).thenReturn(sampleKistaResult);
+        when(kistaPort.sendOrders(any())).thenReturn(sampleKistaId);
         var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, kistaPort);
 
         service.process();
@@ -193,38 +190,4 @@ class TradingRecordServiceTest {
         assertThat(sheetError.getSuppressed()).containsExactly(notifyError);
         verify(kistaPort).sendOrders(any(TradingRecord.class));
     }
-
-    @Test
-    @DisplayName("process(images, date)는 scraper/sheet/notify를 호출하지 않고 KISTA만 전송한다")
-    void processImages_only_calls_kista_skipping_sheet_and_notify() {
-        var image = new byte[]{1, 2, 3};
-        var date = LocalDate.of(2026, 6, 13);
-        when(ocrPort.analyze(anyList())).thenReturn(sampleOrder);
-        when(kistaPort.sendOrders(any())).thenReturn(sampleKistaResult);
-        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, kistaPort);
-
-        service.process(image, date);
-
-        verifyNoInteractions(scraperPort);
-        verifyNoInteractions(sheetPort);
-        verify(ocrPort).analyze(anyList());
-        verify(kistaPort).sendOrders(any(TradingRecord.class));
-    }
-
-    @Test
-    @DisplayName("process(images, date)가 KISTA에 전달하는 TradingRecord는 제공된 날짜와 수동 분석 제목을 가진다")
-    void processImages_tradingRecord_has_provided_date_and_manual_title() {
-        var date = LocalDate.of(2026, 6, 13);
-        when(ocrPort.analyze(any())).thenReturn(sampleOrder);
-        when(kistaPort.sendOrders(any())).thenReturn(sampleKistaResult);
-        var service = new TradingRecordService(scraperPort, ocrPort, sheetPort, notifyPort, kistaPort);
-
-        service.process(new byte[]{1}, date);
-
-        var captor = ArgumentCaptor.forClass(TradingRecord.class);
-        verify(kistaPort).sendOrders(captor.capture());
-        assertThat(captor.getValue().date()).isEqualTo(date);
-        assertThat(captor.getValue().postTitle()).isEqualTo("수동 분석");
-    }
-
 }

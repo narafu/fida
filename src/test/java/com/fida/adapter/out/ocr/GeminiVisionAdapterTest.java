@@ -524,26 +524,8 @@ class GeminiVisionAdapterTest {
     }
 
     @Test
-    @DisplayName("JPEG 매직바이트 이미지는 mime_type을 image/jpeg로 감지해 전송한다")
-    void request_detects_jpeg_mime_type_from_magic_bytes() {
-        // /orders/from-image는 업로드 포맷을 검증하지 않으므로, JPEG를 image/png로 잘못 표기해
-        // Gemini가 "Unable to process input image" 400을 반환한 운영 사례 재현
-        byte[] jpegBytes = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 1, 2, 3};
-        String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holding_qty\\":0}"}]}}]}
-                """;
-        mockServer.expect(requestTo(GEMINI_ENDPOINT))
-                .andExpect(content().string(containsString("\"mime_type\":\"image/jpeg\"")))
-                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
-
-        adapter.analyze(List.of(jpegBytes));
-
-        mockServer.verify();
-    }
-
-    @Test
-    @DisplayName("PNG 시그니처가 아닌 임의 바이트는 기본값 image/png로 전송한다")
-    void request_defaults_to_png_mime_type_for_unknown_bytes() {
+    @DisplayName("mime_type은 항상 image/png로 전송한다")
+    void request_always_sends_png_mime_type() {
         String geminiJson = """
                 {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holding_qty\\":0}"}]}}]}
                 """;

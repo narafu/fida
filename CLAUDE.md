@@ -45,10 +45,8 @@ bash gradlew bootJar                     # app.jar 빌드 (테스트 생략)
 bash gradlew bootRun --args='--spring.profiles.active=local'  # 로컬 실행
 # REST API 수동 트리거 (로컬 실행 중)
 curl -X POST http://localhost:7070/api/fida/orders                                                  # 전체 파이프라인
-curl -X POST http://localhost:7070/api/fida/orders/from-image -F "image=@/path/to/screenshot.png" -F "date=2026-07-10"
 # Swagger UI: http://localhost:7070/swagger-ui.html
 docker compose up --build                # 컨테이너 빌드 및 실행
-docker compose run --rm -e SPRING_PROFILES_ACTIVE=job -e SPRING_MAIN_WEB_APPLICATION_TYPE=none fida  # GitHub Actions one-shot 로컬 테스트
 docker compose build <service> && docker compose up -d --force-recreate <service>  # 설정 변경 후 이미지 재빌드 + 컨테이너 강제 재생성
 docker compose build --no-cache <service>        # 소스 변경 후 캐시 의심 시 강제 재빌드
 docker run --rm -e KEY=val ... <image>           # 컨테이너 기동 오류 빠른 확인
@@ -88,8 +86,6 @@ playwright-server/    ← Node.js 사이드카 (Java로 이식 금지)
 - Virtual Threads 활성화 (`spring.threads.virtual.enabled=true`)
 - springdoc = "2.8.4" (`gradle/libs.versions.toml`) — 2.6.x는 Spring Boot 3.4.x(Spring Framework 6.2)와 `NoSuchMethodError: ControllerAdviceBean` 충돌 있어 2.7.0+ 유지 필요
 - Docker: ZGC + MaxRAMPercentage=75.0, non-root 실행
-- GitHub Actions one-shot 실행: `SPRING_PROFILES_ACTIVE=job` + `SPRING_MAIN_WEB_APPLICATION_TYPE=none` 필수 조합 — 후자 없으면 ApplicationRunner 완료 후에도 웹서버가 살아 컨테이너 무한 대기
-- Spring Profile: `job` = `FandingRunner`(one-shot) 활성, `FandingScheduler` 비활성 / `!job` = `FIDA_SCHEDULER_ENABLED=true`일 때 `FandingScheduler` 활성
 - Mockito로 RestTemplate 테스트 시: `postForObject`는 varargs(`Object... uriVars`)가 있어 URL 매처로 `any()` 대신 `anyString()` 사용 필요
 - Lombok `1.18.36` 적용됨 — `@RequiredArgsConstructor` + `@Slf4j` 사용
   - `@Value` 설정 필드: **non-final로 선언할 것** — `copyableAnnotations`가 CI 환경에서 적용되지 않아 `final`+`@Value` 조합은 GitHub Actions에서 `No qualifying bean of type 'String'` 오류 발생. `@RequiredArgsConstructor`에서 제외되고 Spring이 필드 주입으로 처리함 (`KistaAdapter`, `TelegramAdapter`, `FandingScraperAdapter` 모두 non-final)

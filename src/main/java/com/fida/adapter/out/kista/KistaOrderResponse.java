@@ -1,19 +1,6 @@
 package com.fida.adapter.out.kista;
 
-import com.fida.domain.model.Order;
-
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.util.List;
 import java.util.UUID;
 
-record KistaOrderResponse(
-        UUID id,
-        LocalDate releaseDate,
-        String ticker,
-        BigDecimal currentCycleStart,
-        BigDecimal currentCycleRealizedPnl,
-        BigDecimal avgPrice,
-        int holdings,
-        List<Order> orders
-) {}
+// KISTA 응답에서 저장 ID만 읽는다 (나머지 필드는 무시)
+record KistaOrderResponse(UUID id) {}

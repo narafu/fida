@@ -20,9 +20,6 @@ google-apis-sheets             = { module = "com.google.apis:google-api-services
 # API Documentation
 springdoc-openapi-webmvc-ui    = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
 
-# Observability
-micrometer-prometheus           = { module = "io.micrometer:micrometer-registry-prometheus" }
-
 # Lombok
 lombok                         = { module = "org.projectlombok:lombok", version.ref = "lombok" }
 

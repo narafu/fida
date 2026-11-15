@@ -1,24 +1,15 @@
 package com.fida.adapter.in.web;
 
-import com.fida.domain.port.in.ProcessImagesUseCase;
 import com.fida.domain.port.in.ProcessTradingRecordUseCase;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.multipart.MultipartFile;
-
-import java.io.IOException;
-import java.time.LocalDate;
 
 @Tag(name = "FIDA 주문", description = "매매 기록 처리 트리거")
 @RestController
@@ -27,7 +18,6 @@ import java.time.LocalDate;
 public class FidaOrderController {
 
     private final ProcessTradingRecordUseCase useCase;
-    private final ProcessImagesUseCase processImages;
 
     // 스크래핑 → OCR → 시트 기록 → 텔레그램 알림 → KISTA 주문 전송 파이프라인 트리거
     @Operation(
@@ -44,32 +34,5 @@ public class FidaOrderController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void trigger() {
         useCase.process();
-    }
-
-    // 이미지 직접 업로드 → OCR → KISTA 주문 전송, KISTA 저장 ID 반환
-    @Operation(
-            summary = "이미지 직접 업로드 트리거",
-            description = "분석할 이미지를 multipart로 업로드. date 미지정 시 오늘 날짜 사용. KISTA 저장 ID를 반환한다."
-    )
-    @ApiResponse(responseCode = "200", description = "파이프라인 처리 완료, KISTA 저장 ID 포함")
-    @PostMapping(value = "/orders/from-image", consumes = "multipart/form-data")
-    public FromImageResponse triggerFromImage(
-            @RequestPart("image") MultipartFile image,
-            @Parameter(description = "매매 날짜 (yyyy-MM-dd). 미지정 시 오늘 날짜 사용", example = "2026-06-13")
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        // 빈 파일은 Gemini까지 보내지 않고 즉시 거부 — Gemini의 모호한 "Unable to process input image" 400 방지
-        if (image.isEmpty()) {
-            throw new IllegalArgumentException("업로드된 이미지가 비어있습니다: " + image.getOriginalFilename());
-        }
-        LocalDate tradeDate = date != null ? date : LocalDate.now();
-        return FromImageResponse.from(processImages.process(readBytes(image), tradeDate));
-    }
-
-    private static byte[] readBytes(MultipartFile file) {
-        try {
-            return file.getBytes();
-        } catch (IOException e) {
-            throw new IllegalStateException("이미지 파일 읽기 실패: " + file.getOriginalFilename(), e);
-        }
     }
 }

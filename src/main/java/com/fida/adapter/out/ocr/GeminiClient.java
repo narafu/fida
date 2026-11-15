@@ -140,7 +140,8 @@ class GeminiClient {
         parts.add(Map.of("text", PROMPT));
         for (byte[] img : images) {
             parts.add(Map.of("inline_data", Map.of(
-                    "mime_type", detectMimeType(img),
+                    // 스크래퍼 스크린샷은 항상 PNG (playwright-server screenshot type: png)
+                    "mime_type", "image/png",
                     "data", Base64.getEncoder().encodeToString(img)
             )));
         }
@@ -160,26 +161,9 @@ class GeminiClient {
             for (int b = 0; b < headerLen; b++) {
                 hex.append(String.format("%02X ", img[b]));
             }
-            log.info("Gemini 이미지 진단 [{}/{}] bytes={} header={}mime={}",
-                    i + 1, images.size(), img.length, hex, detectMimeType(img));
+            log.info("Gemini 이미지 진단 [{}/{}] bytes={} header={}",
+                    i + 1, images.size(), img.length, hex);
         }
-    }
-
-    // /orders/from-image는 업로드 파일 포맷을 검증하지 않으므로, 매직바이트로 실제 포맷을 감지해
-    // Gemini에 잘못된 mime_type(예: JPEG를 image/png로 표기)을 보내 400 오류가 나는 것을 방지
-    private String detectMimeType(byte[] img) {
-        if (img.length >= 3 && (img[0] & 0xFF) == 0xFF && (img[1] & 0xFF) == 0xD8 && (img[2] & 0xFF) == 0xFF) {
-            return "image/jpeg";
-        }
-        if (img.length >= 6 && img[0] == 'G' && img[1] == 'I' && img[2] == 'F' && img[3] == '8') {
-            return "image/gif";
-        }
-        if (img.length >= 12 && img[0] == 'R' && img[1] == 'I' && img[2] == 'F' && img[3] == 'F'
-                && img[8] == 'W' && img[9] == 'E' && img[10] == 'B' && img[11] == 'P') {
-            return "image/webp";
-        }
-        // PNG 시그니처 및 그 외(테스트 더미 바이트 등)는 기존 동작 유지 위해 기본값 image/png
-        return "image/png";
     }
 
     private void recordQuota() {

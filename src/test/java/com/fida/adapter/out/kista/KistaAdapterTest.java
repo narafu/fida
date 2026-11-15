@@ -13,6 +13,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpEntity;
+import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestTemplate;
 
@@ -49,14 +50,9 @@ class KistaAdapterTest {
         adapter = new KistaAdapter(restTemplate);
         ReflectionTestUtils.setField(adapter, "baseUrl", KISTA_URL);
         ReflectionTestUtils.setField(adapter, "internalApiToken", "test-token");
-        // 요청 데이터를 그대로 에코하는 응답으로 검증 통과 (일부 테스트에서 재정의)
+        // 기본 응답은 저장 ID만 (일부 테스트에서 재정의)
         lenient().when(restTemplate.postForObject(eq(EXPECTED_URL), any(), eq(KistaOrderResponse.class)))
-                .thenAnswer(inv -> {
-                    FidaOrderRequest req = (FidaOrderRequest) ((HttpEntity<?>) inv.getArgument(1)).getBody();
-                    return new KistaOrderResponse(SAVED_ID, req.tradeDate(), req.ticker(),
-                            req.currentCycleStart(), req.currentCycleRealizedPnl(),
-                            req.avgPrice(), req.holdings(), req.orders());
-                });
+                .thenReturn(new KistaOrderResponse(SAVED_ID));
     }
 
     private static final BigDecimal DEFAULT_CYCLE_START = new BigDecimal("1000");
@@ -91,7 +87,7 @@ class KistaAdapterTest {
     @DisplayName("KISTA 응답의 id를 반환한다")
     void sendOrders_returns_saved_id_from_response() {
         var result = adapter.sendOrders(recordWith(List.of(), List.of()));
-        assertThat(result.id()).isEqualTo(SAVED_ID);
+        assertThat(result).isEqualTo(SAVED_ID);
     }
 
     @Test
@@ -231,43 +227,32 @@ class KistaAdapterTest {
 
         assertThatThrownBy(() -> adapter.sendOrders(recordWith(List.of(), List.of())))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("null");
+                .hasMessageContaining("id");
     }
 
     @Test
-    @DisplayName("응답 tradeDate가 다르면 IllegalStateException을 던진다")
-    void sendOrders_throws_when_response_tradeDate_mismatches() {
+    @DisplayName("응답 id가 null이면 IllegalStateException을 던진다")
+    void sendOrders_throws_when_response_id_is_null() {
         when(restTemplate.postForObject(eq(EXPECTED_URL), any(), eq(KistaOrderResponse.class)))
-                .thenReturn(new KistaOrderResponse(SAVED_ID, TRADE_DATE.plusDays(1),
-                        "SOXL", BigDecimal.ZERO, BigDecimal.ZERO, null, 0, List.of()));
+                .thenReturn(new KistaOrderResponse(null));
 
         assertThatThrownBy(() -> adapter.sendOrders(recordWith(List.of(), List.of())))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("tradeDate");
+                .hasMessageContaining("id");
     }
 
     @Test
-    @DisplayName("응답 orders가 null이면 IllegalStateException을 던진다")
-    void sendOrders_throws_when_response_orders_is_null() {
-        when(restTemplate.postForObject(eq(EXPECTED_URL), any(), eq(KistaOrderResponse.class)))
-                .thenReturn(new KistaOrderResponse(SAVED_ID, TRADE_DATE,
-                        "SOXL", BigDecimal.ZERO, BigDecimal.ZERO, null, 0, null));
+    @DisplayName("KISTA 전체 응답 JSON에서 id만 읽고 나머지 필드는 무시한다")
+    void kistaOrderResponse_reads_only_id_from_full_body() throws Exception {
+        var json = """
+                {"id":"%s","releaseDate":"2024-01-15","tradeDate":"2024-01-15","ticker":"SOXL",
+                 "currentCycleStart":1000,"currentCycleRealizedPnl":0,"avgPrice":10.5,"holdings":3,
+                 "orders":[{"orderType":"LIMIT","direction":"BUY","quantity":1,"price":10.5}]}
+                """.formatted(SAVED_ID);
 
-        assertThatThrownBy(() -> adapter.sendOrders(recordWith(List.of(), List.of())))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("orders");
-    }
+        // RestTemplate 컨버터와 같은 Boot 기본 설정(unknown 프로퍼티 무시)으로 역직렬화
+        var mapper = Jackson2ObjectMapperBuilder.json().build();
 
-    @Test
-    @DisplayName("응답 orders 수가 다르면 IllegalStateException을 던진다")
-    void sendOrders_throws_when_response_orders_size_mismatches() {
-        var extraOrder = new Order(Order.OrderType.LIMIT, Order.OrderDirection.BUY, 1, BigDecimal.TEN);
-        when(restTemplate.postForObject(eq(EXPECTED_URL), any(), eq(KistaOrderResponse.class)))
-                .thenReturn(new KistaOrderResponse(SAVED_ID, TRADE_DATE,
-                        "SOXL", BigDecimal.ZERO, BigDecimal.ZERO, null, 0, List.of(extraOrder)));
-
-        assertThatThrownBy(() -> adapter.sendOrders(recordWith(List.of(), List.of())))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("orders");
+        assertThat(mapper.readValue(json, KistaOrderResponse.class).id()).isEqualTo(SAVED_ID);
     }
 }

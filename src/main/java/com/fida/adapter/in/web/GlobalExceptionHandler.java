@@ -18,7 +18,6 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClientException;
-import org.springframework.web.multipart.MultipartException;
 
 import java.io.IOException;
 
@@ -117,7 +116,7 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleUnexpected(Exception ex) throws Exception {
         // Spring MVC 표준 요청 오류·클라이언트 연결 끊김은 다시 던져 DefaultHandlerExceptionResolver가 원래 4xx 상태·헤더로 처리하게 함
         if (ex instanceof ErrorResponse || ex instanceof TypeMismatchException
-                || ex instanceof HttpMessageNotReadableException || ex instanceof MultipartException
+                || ex instanceof HttpMessageNotReadableException
                 || ex instanceof IOException) {
             throw ex;
         }

@@ -28,11 +28,11 @@
 
 ## 인바운드 웹 레이어
 
-- `FidaOrderController`: 2개 엔드포인트 — `POST /orders`(204, 바디 없음), `POST /orders/from-image`(200, KISTA 저장 ID 포함 `FromImageResponse` 반환)
+- `FidaOrderController`: 1개 엔드포인트 — `POST /orders`(204, 바디 없음)
 - `GlobalExceptionHandler`: `@RestControllerAdvice` 전역 예외 처리 — 새 예외 타입 추가 시 여기도 확인
 - `OpenApiConfig`: Swagger UI 설정 — springdoc 버전은 루트 CLAUDE.md Key Constraints 참조
 
 ## 인바운드 스케줄 레이어
 
-- `FandingScheduler`: `@Profile("!job")` 및 `fida.scheduler.enabled=true`일 때만 활성화. OCI 상시 기동 서버에서의 정식 자동 실행 경로이며, `FIDA_SCHEDULER_ENABLED`(기본 `true`)로 제어
+- `FandingScheduler`: `fida.scheduler.enabled=true`일 때만 활성화. OCI 상시 기동 서버에서의 정식 자동 실행 경로이며, `FIDA_SCHEDULER_ENABLED`(기본 `true`)로 제어
 - 07:00 실행 실패 시 `TaskScheduler`로 20분 후 1회만 재시도(07:00 기동 시점 기준 07:20, 재시도 실패는 알림만, 추가 예약 없음). 예약은 메모리상이라 대기 중 재기동·배포 시 유실 — 배포 가드(06:50~07:45 KST)가 유일한 보호

@@ -35,9 +35,6 @@ dependencies {
     // API Documentation
     implementation(libs.springdoc.openapi.webmvc.ui)
 
-    // Observability
-    implementation(libs.micrometer.prometheus)
-
     // Lombok
     annotationProcessor(libs.lombok)
     testAnnotationProcessor(libs.lombok)

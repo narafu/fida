@@ -1,9 +1,7 @@
 package com.fida.application.service;
 
-import com.fida.domain.model.KistaResult;
 import com.fida.domain.model.ScrapedPost;
 import com.fida.domain.model.TradingRecord;
-import com.fida.domain.port.in.ProcessImagesUseCase;
 import com.fida.domain.port.in.ProcessTradingRecordUseCase;
 import com.fida.domain.port.out.KistaPort;
 import com.fida.domain.port.out.NotifyPort;
@@ -14,13 +12,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
 @Service
-public class TradingRecordService implements ProcessTradingRecordUseCase, ProcessImagesUseCase {
+public class TradingRecordService implements ProcessTradingRecordUseCase {
 
     private final ScraperPort scraper;
     private final OcrPort ocr;
@@ -43,18 +40,6 @@ public class TradingRecordService implements ProcessTradingRecordUseCase, Proces
         processPost(scraper.scrape());
         // 서버 로그만으로 실행 결과를 확인할 수 있도록 전체 완료·소요 시간 기록
         log.info("파이프라인 완료 ({}ms)", System.currentTimeMillis() - startedAt);
-    }
-
-    @Override
-    public KistaResult process(byte[] image, LocalDate tradeDate) {
-        // 이미지 직접 제공 시 OCR → KISTA 전송만 수행 (sheet/notify 생략)
-        // KISTA 결과를 HTTP 응답으로 돌려주는 경로라 스케줄 경로와 달리 KISTA 실패를 의도적으로 예외 전파
-        var post = new ScrapedPost("수동 분석", tradeDate, "-", List.of(image));
-        var order = ocr.analyze(post.images());
-        var record = TradingRecord.of(post, order);
-        var result = kista.sendOrders(record);
-        notify.notifyKistaSuccess(record, result.id());
-        return result;
     }
 
     // OCR → Sheet → Telegram → Kista 공통 파이프라인
@@ -89,9 +74,9 @@ public class TradingRecordService implements ProcessTradingRecordUseCase, Proces
     // KISTA 실패는 파이프라인 실패로 보지 않음 — 별도 실패 알림만 전송
     private void sendToKista(TradingRecord record) {
         try {
-            var result = kista.sendOrders(record);
-            log.info("KISTA 전송 완료 id={} tradeDate={}", result.id(), result.tradeDate());
-            notify.notifyKistaSuccess(record, result.id());
+            var id = kista.sendOrders(record);
+            log.info("KISTA 전송 완료 id={} tradeDate={}", id, record.date());
+            notify.notifyKistaSuccess(record, id);
         } catch (Exception e) {
             log.warn("KISTA 전송 실패 (무시): {}", e.getMessage());
             notify.notifyKistaFailure(record, e);

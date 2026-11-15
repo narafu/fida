@@ -1,6 +1,5 @@
 package com.fida.adapter.out.kista;
 
-import com.fida.domain.model.KistaResult;
 import com.fida.domain.model.TradingRecord;
 import com.fida.domain.port.out.KistaPort;
 import lombok.RequiredArgsConstructor;
@@ -10,6 +9,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
+
+import java.util.UUID;
 
 @Component
 @RequiredArgsConstructor
@@ -27,35 +28,17 @@ public class KistaAdapter implements KistaPort {
     private String internalApiToken;
 
     @Override
-    public KistaResult sendOrders(TradingRecord record) {
+    public UUID sendOrders(TradingRecord record) {
         var request = FidaOrderRequest.of(record, SYMBOL);
 
         var targetUrl = baseUrl + INTERNAL_ORDER_PATH;
 
         var response = restTemplate.postForObject(targetUrl, createInternalRequestEntity(request), KistaOrderResponse.class);
-        if (response == null) {
-            throw new IllegalStateException("KISTA 응답이 null입니다");
+        // 응답은 저장 ID만 사용 — 요청값 에코라 다른 필드 대조는 의미 없음
+        if (response == null || response.id() == null) {
+            throw new IllegalStateException("KISTA 응답에 id가 없습니다");
         }
-        if (response.orders() == null) {
-            throw new IllegalStateException("KISTA 응답 orders가 null입니다");
-        }
-        validate(request, response);
-        return new KistaResult(response.id(), response.releaseDate(), response.ticker(),
-                response.currentCycleStart(), response.currentCycleRealizedPnl(),
-                response.avgPrice(), response.holdings(), response.orders());
-    }
-
-    private void validate(FidaOrderRequest req, KistaOrderResponse res) {
-        if (!req.tradeDate().equals(res.releaseDate())
-                || req.holdings() != res.holdings()
-                || req.orders().size() != res.orders().size()) {
-            throw new IllegalStateException(String.format(
-                    "KISTA 응답 불일치 — tradeDate: %s→%s, holdings: %d→%d, orders: %d→%d",
-                    req.tradeDate(), res.releaseDate(),
-                    req.holdings(), res.holdings(),
-                    req.orders().size(), res.orders().size()
-            ));
-        }
+        return response.id();
     }
 
     private HttpEntity<FidaOrderRequest> createInternalRequestEntity(FidaOrderRequest requestBody) {
