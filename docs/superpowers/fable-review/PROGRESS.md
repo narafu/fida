@@ -24,9 +24,9 @@
 
 1. ~~`02` 태스크 1~5~~ — 완료 (2026-11-15). GitHub Secrets 중 `fida-schedule.yml` 전용 9개는 사용자가 직접 삭제
 2. ~~`03` 태스크 2·3~~ — 코드 완료 (2026-11-15, 커밋 cd286bb·8373741). ocr 테스트 이전 전후 43개, DisplayName 집합 동일
-   - 태스크 3 **서버 배포: 미배포** (push 대기). main push 시 `server-deploy.yml`이 배포한다. 화~토 06:50~07:45 KST는 피한다
-   - 배포 뒤 첫 실행에서 서버 `/opt/fida/.fida-state/ocr-archive/<날짜>/` 생성을 확인하고 여기에 배포일을 적는다: `배포일: ____`
-   - 배포일부터 20거래일 뒤가 `03` 태스크 4 시작 시점이다
+   - 태스크 3 **서버 배포: 2026-11-15** (커밋 3562d4a, Server Deploy 성공, 컨테이너 healthy, `/state`를 appuser 100:101이 쓸 수 있음 확인). `OCR_ARCHIVE_PATH`는 서버 `.env`에 없어 기본값 `/state/ocr-archive`를 쓴다
+   - 첫 보관은 다음 정규 실행 2026-11-17(화) 07:00 KST. 그 뒤 `ssh fida-server ls /opt/fida/.fida-state/ocr-archive/`로 날짜 폴더 생성을 확인한다
+   - 20거래일 뒤가 `03` 태스크 4 시작 시점이다. 화~토 실행 기준 2026-12-12(토)쯤이고, 미국 휴장일만큼 늦어진다. 날짜 폴더가 20개 이상인지로 판정한다
    - infra 이전 시 `/opt/fida/.fida-state/ocr-archive/`를 옮긴다(uid 100:101 소유)
 3. `04` 태스크 7 (pre-apply 훅) — 완료 (2026-11-15, 커밋 d57e133, `--self-test`는 macOS·ubuntu 양쪽 통과) → infra 이전 → `04` 태스크 8
 4. `04` 태스크 1~4·6 (삭제 후보 승인 뒤, CLAUDE.md는 코드 쪽 결정이 끝난 뒤 한 번에)
