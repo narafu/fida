@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpServerErrorException;
 
+import java.nio.file.Path;
 import java.util.List;
 
 // OCR 재시도 오케스트레이션 — 호출(GeminiClient)·파싱(GeminiResponseParser)·보정(OcrResultReconciler)을 묶는다
@@ -24,6 +25,7 @@ public class GeminiVisionAdapter implements OcrPort {
 
     private final GeminiClient client; // Gemini 1회 호출
     private final NotifyPort notifyPort; // OCR 경고·오류 알림
+    private final OcrArchive archive; // 회귀 자료 보관 (실패 무해)
 
     @Override
     public ParsedOrder analyze(List<byte[]> images) {
@@ -31,13 +33,18 @@ public class GeminiVisionAdapter implements OcrPort {
             throw new IllegalArgumentException("OCR 대상 이미지가 없습니다");
         }
 
+        // 원본 이미지 보관 (Gemini 호출 전)
+        Path archiveRun = archive.begin(images);
         // 503·JSON 파싱 실패는 3회 예산 안에서 재시도, 그 외 오류는 GeminiClient가 알림 후 즉시 전파
         Exception lastFailure = null;
         // holdings 누락 의심으로 재요청한 직전 결과 — 이후 시도가 모두 실패하면 이 값을 반환
         OcrResultReconciler.Result suspicious = null;
         for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
-                var result = OcrResultReconciler.reconcile(GeminiResponseParser.parse(client.generate(images)));
+                String raw = client.generate(images);
+                // parse 전에 원시 응답 보관 — 파싱 실패·재요청으로 버린 응답도 남긴다
+                archive.saveResponse(archiveRun, attempt, raw);
+                var result = OcrResultReconciler.reconcile(GeminiResponseParser.parse(raw));
                 // 운영 사례(2026-08-14): holdings 관련 필드를 통째로 누락한 채 SELL 주문만 파싱되는 경우가 있어,
                 // 남은 재시도가 있으면 Gemini에 다시 요청해 완전한 응답을 한 번 더 시도한다
                 if (isHoldingsSuspiciouslyMissing(result.order()) && attempt < MAX_RETRIES) {

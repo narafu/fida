@@ -40,6 +40,9 @@ fida:
 gemini:
   api-key: ${GEMINI_API_KEY}
 
+ocr:
+  archive-path: ${OCR_ARCHIVE_PATH:/state/ocr-archive}
+
 google:
   sheets:
     spreadsheet-id: ${GOOGLE_SHEETS_SPREADSHEET_ID}

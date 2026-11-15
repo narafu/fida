@@ -57,7 +57,7 @@ class GeminiVisionAdapterTest {
                 new GeminiQuotaTracker(Path.of(System.getProperty("java.io.tmpdir"),
                         "fida-gemini-quota-test-" + System.nanoTime() + ".json"), 20, java.time.LocalDate::now));
         ReflectionTestUtils.setField(client, "apiKey", API_KEY);
-        adapter = new GeminiVisionAdapter(client, notifyPort);
+        adapter = new GeminiVisionAdapter(client, notifyPort, mock(OcrArchive.class));
         ReflectionTestUtils.setField(adapter, "retryDelayMs", 0L); // 테스트에서 대기 시간 제거
     }
 
