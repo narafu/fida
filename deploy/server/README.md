@@ -78,6 +78,8 @@ FIDA_SCHEDULER_ENABLED=true      # 기본값이라 생략 가능이지만 명시
 GEMINI_QUOTA_USAGE_PATH=/state/gemini-quota-usage.json
 ```
 
+healthchecks.io 체크: slug `fida-scheduler`, schedule `0 7 * * 2-6`(tz `Asia/Seoul`), grace 1시간. 성공한 스케줄 실행 직후에만 핑한다.
+
 `secrets/service-account.json`은 서버가 직접 관리한다(GitHub Actions가 만들지 않음) — 로컬 원본은 `/Users/phs/secret/google-sheet-secret.json`.
 
 `fida` 컨테이너는 non-root(`appuser`, Alpine `adduser -S`가 부여하는 UID/GID — 통상 100:101이나 고정 보장은 없음)로 실행되므로, 파일을 배치한 뒤 컨테이너 내부 UID/GID로 소유권을 맞춰야 한다(기본 `600`에 소유자가 다르면 `Permission denied`로 부팅 실패):
@@ -96,12 +98,10 @@ sudo chown 100:101 /opt/fida/.fida-state
 
 1. `main` push → 테스트
 2. arm64 이미지 2개(`fida`, `playwright-server`) 빌드 → GHCR push
-3. fida 자체 스케줄 실행창(화~토 06:50~07:30 KST) 회피 후 SSH 배포
+3. fida 자체 스케줄 실행창(화~토 06:50~07:45 KST) 회피 후 SSH 배포
 4. `docker compose pull && docker compose up -d --no-deps fida playwright-server` — routine 배포가 caddy를 건드리지 않는 kista-api와 동일한 blast-radius 격리 원칙. `docker compose up -d caddy`도 이어서 실행(이미지 태그 고정이라 기존 캐디는 무변경, 최초 배포 시에만 실제로 생성됨)
 5. 헬스 게이트(최대 5분)
 6. 실패 시 자동 롤백
-
-**최초 배포 후 수동 스모크 권장**: `playwright-server/Dockerfile`이 Puppeteer 번들 Chrome 대신 시스템 Chromium(apt 설치, arm64 지원)을 쓰도록 전환됐다 — 번들 Chrome-for-Testing과 버전이 다르므로, 첫 배포 직후 실제 스크래핑 1회(수동 `workflow_dispatch` 또는 서버에서 직접 트리거)로 정상 동작을 확인할 것.
 
 ## 수동 트리거
 
@@ -124,5 +124,6 @@ cd /opt/fida
 docker images | grep fida
 
 export FIDA_IMAGE=ghcr.io/<org>/fida:<previous-sha>
+export PLAYWRIGHT_SERVER_IMAGE=ghcr.io/<org>/playwright-server:<previous-sha>
 docker compose up -d --no-deps fida playwright-server
 ```

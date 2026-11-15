@@ -1,160 +1,58 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## 코드 철학
 
 - 반복 코드보다 재사용성·가독성·최신 문법을 우선
-- 디자인 패턴, 객체지향, SOLID 원칙 준수
-- Hexagonal Architecture, EDD, DDD, CQRS, TDA 설계 지향
-- 코드 철학에 맞지 않는 코드베이스를 발견하면 개선을 제안할 것 — 다른 작업 중 우연히 발견한 경우도 포함
-- 개념적으로 어색한 위치에 있는 클래스를 발견하면 리팩토링을 제안할 것
+- 디자인 패턴, 객체지향, SOLID 원칙 준수. Hexagonal Architecture, EDD, DDD, CQRS, TDA 설계 지향
+- 코드 철학에 맞지 않는 코드나 개념적으로 어색한 위치의 클래스를 발견하면 개선을 제안할 것
 
 ## RESTful 설계 원칙
 
-- URI: 명사·복수형 (`/orders`), 동사 금지
-- HTTP 메서드: GET=읽기 / POST=생성 / PUT=전체교체 / PATCH=부분수정 / DELETE=삭제
-- 상태 코드: 200·201·204 성공 / 400·404·409 클라이언트 오류 / 503 외부 서비스 오류
-- 응답: 도메인 객체 직접 반환 금지 → 전용 Response DTO 사용 (`from()` 팩토리)
-- 생성 성공(201): `Location` 헤더에 신규 리소스 URI 포함
+- URI는 명사·복수형, 메서드는 GET/POST/PUT/PATCH/DELETE 의미대로, 오류는 400·404·409, 외부 서비스 오류는 503
+- 도메인 객체 직접 반환 금지 — 전용 Response DTO(`from()` 팩토리). 201 응답은 `Location` 헤더 포함
 
 ## 주석 규칙
 
-- 신규 코드 작성 시 주석을 함께 작성할 것
-- 필드: `// 역할 한 줄` 인라인 주석
-- 비즈니스 로직 블록 직전: 단계 설명 한 줄
+- 신규 코드에는 주석을 함께 작성. 필드는 `// 역할 한 줄`, 비즈니스 로직 블록 직전에 단계 설명 한 줄
 - Javadoc·블록 주석 금지 — `//` 인라인만 사용
-
-## 작업 방식
-
-- 독립적으로 병렬 처리 가능한 작업은 서브에이전트를 적극 활용
-- 요청이 모호하거나 구체적 지침이 필요한 경우 가정하고 진행하지 말고 먼저 질문
-
-## Git 규칙
-
-- `git push`는 사용자가 명시적으로 요청한 경우에만 실행 — 커밋 후 자동 푸시 금지
-- 커밋 전 `git config user.name` / `git config user.email` 확인 — 올바른 author: `narafu <narafu@kakao.com>`
 
 ## Commands
 
-Gradle 8.14는 JDK 25에서 실행되지 않으므로 시스템 기본 JDK가 25면 gradle 명령 앞에 `JAVA_HOME=$(/usr/libexec/java_home -v 21)`을 붙인다.
+Gradle 8.14는 JDK 25에서 실행되지 않는다. 기본 JDK가 25면 앞에 `JAVA_HOME=$(/usr/libexec/java_home -v 21)`을 붙인다.
 
 ```bash
-bash gradlew build                       # 컴파일 + 테스트 + JAR
-bash gradlew test                        # 전체 테스트 (JUnit 5, 병렬 실행)
-bash gradlew test --tests "com.fida.architecture.HexagonalArchitectureTest"  # 아키텍처 규칙만
-bash gradlew bootJar                     # app.jar 빌드 (테스트 생략)
-bash gradlew bootRun --args='--spring.profiles.active=local'  # 로컬 실행
-# REST API 수동 트리거 (로컬 실행 중)
-curl -X POST http://localhost:7070/api/fida/orders                                                  # 전체 파이프라인
-# Swagger UI: http://localhost:7070/swagger-ui.html
-docker compose up --build                # 컨테이너 빌드 및 실행
-docker compose build <service> && docker compose up -d --force-recreate <service>  # 설정 변경 후 이미지 재빌드 + 컨테이너 강제 재생성
-docker compose build --no-cache <service>        # 소스 변경 후 캐시 의심 시 강제 재빌드
-docker run --rm -e KEY=val ... <image>           # 컨테이너 기동 오류 빠른 확인
-gh run list --repo narafu/fida --limit 5         # GitHub Actions 최근 실행 목록
-gh run view <run-id> --log-failed                # 실패 실행 로그 확인
+bash gradlew build                                                            # 컴파일 + 테스트 + JAR
+bash gradlew test --tests "com.fida.architecture.HexagonalArchitectureTest"   # 아키텍처 규칙만
+bash gradlew bootRun --args='--spring.profiles.active=local'                  # 로컬 실행
+curl -X POST http://localhost:7070/api/fida/orders                            # 전체 파이프라인 수동 트리거
 ```
 
 ## Architecture
 
-Hexagonal Architecture (Ports & Adapters) — ArchUnit 테스트로 의존성 방향 강제 검증됨.
+Hexagonal Architecture — ArchUnit 테스트로 의존성 방향(`adapter → application(port 경유) → domain`) 강제.
 
 ```
-domain/model/         ← 외부 의존성 0 (Spring 어노테이션 금지)
-domain/port/in/       ← UseCase 인터페이스
-domain/port/out/      ← 외부 연동 포트 인터페이스
+domain/model/         ← 외부 의존성 0 (Spring 어노테이션 금지), record 사용
+domain/port/in|out/   ← UseCase / 외부 연동 포트
 application/service/  ← UseCase 구현체 (@Service만 허용, adapter 직접 참조 금지)
-adapter/in/schedule/  ← 스케줄·Runner (FandingScheduler, FandingRunner)
-adapter/in/web/       ← REST 트리거 (FidaOrderController, GlobalExceptionHandler, OpenApiConfig)
-adapter/out/          ← 아웃바운드 (scraper, ocr, sheets, notify, kista)
-common/               ← 유틸리티 (CommaBigDecimalDeserializer 등)
-config/               ← 인프라 빈 설정 (GoogleSheetsConfig, RestTemplateConfig)
+adapter/in/           ← schedule(FandingScheduler), web(FidaOrderController 등)
+adapter/out/          ← scraper, ocr, sheets, notify, kista, heartbeat
+common/, config/      ← 유틸리티, 인프라 빈 설정
 playwright-server/    ← Node.js 사이드카 (Java로 이식 금지)
 ```
 
-의존성 방향: `adapter → application(port 경유) → domain`
+어댑터 규칙·OCR 보정 이유: `src/main/java/com/fida/adapter/CLAUDE.md`. 배포·서버 운영: `deploy/server/README.md`. 환경변수: `.env.example`.
 
 ## Key Constraints
 
-- FIDA 서버 포트: 기본 **7070** (KISTA가 8080 사용 중). `server.port: ${PORT:7070}` — 로컬/Docker Compose/OCI 서버 모두 기본값 7070 사용. Dockerfile `EXPOSE` 및 docker-compose.yml healthcheck URL은 7070 유지
-- DB 없음 (JPA/DataSource 추가 금지), RestTemplate 전용 (WebClient 금지)
-- Gemini 모델: `gemini-2.5-flash-lite` 고정
-- Gemini HTTP 429/`RESOURCE_EXHAUSTED`는 `OcrException("Gemini API 일일한도 초과")`로 분류 — 일반 `Gemini API 통신 오류`로 뭉개지 않음
-- 스케줄: 화~토 07:00 KST (`cron = "0 0 7 * * TUE-SAT"`, 변경 금지). `FIDA_SCHEDULER_ENABLED=false`이면 `FandingScheduler` 비활성
-- Google Sheets 셀 범위 고정: `A1, C2:D4, C5:D7, A8, C8, D8`
-  - **A8 = "현사이클 시작"** (`current_cycle_start`) — "잔금(cash_balance)"과 혼동 금지
-  - A1 날짜 결정: 제목 M/D 패턴 1순위 → scraper postDate 2순위 → `LocalDate.now()` 3순위 (`FandingScraperAdapter.resolveDateFromTitle()`)
-- Virtual Threads 활성화 (`spring.threads.virtual.enabled=true`)
-- springdoc = "2.8.4" (`gradle/libs.versions.toml`) — 2.6.x는 Spring Boot 3.4.x(Spring Framework 6.2)와 `NoSuchMethodError: ControllerAdviceBean` 충돌 있어 2.7.0+ 유지 필요
-- Docker: ZGC + MaxRAMPercentage=75.0, non-root 실행
-- Mockito로 RestTemplate 테스트 시: `postForObject`는 varargs(`Object... uriVars`)가 있어 URL 매처로 `any()` 대신 `anyString()` 사용 필요
-- Lombok `1.18.36` 적용됨 — `@RequiredArgsConstructor` + `@Slf4j` 사용
-  - `@Value` 설정 필드: **non-final로 선언할 것** — `copyableAnnotations`가 CI 환경에서 적용되지 않아 `final`+`@Value` 조합은 GitHub Actions에서 `No qualifying bean of type 'String'` 오류 발생. `@RequiredArgsConstructor`에서 제외되고 Spring이 필드 주입으로 처리함 (`KistaAdapter`, `TelegramAdapter`, `FandingScraperAdapter` 모두 non-final)
-  - 어댑터 테스트에서 non-final `@Value` 필드 값 설정: `ReflectionTestUtils.setField(adapter, "fieldName", value)`
-  - `TradingRecordService`는 `@Lazy SheetPort` 파라미터 때문에 `@RequiredArgsConstructor` 미적용 — 명시적 생성자 유지
-- 파일 인코딩 주의 (BOM): 서브에이전트가 Java 파일 import 수정 시 BOM(`\xef\xbb\xbf`) 삽입 버그 발생 사례 → `compileJava` 즉시 실패. 일괄 제거: `grep -rl $'\xef\xbb\xbf' src --include="*.java" | while read f; do sed -i '1s/^\xef\xbb\xbf//' "$f"; done`
-
-## Current Status
-
-- 소스 코드: **모든 구현 완료** (KistaAdapter, FidaOrderController 포함 12개 태스크 completed)
-- 구현 태스크는 shrimp-task-manager로 관리 중 (`list_tasks`로 확인)
-- **OCI 상시 기동 서버로 이전 완료 (2026-08-04 커트오버 검증됨)**: `.github/workflows/server-deploy.yml`(main 브랜치 push 시 자동 배포, fida 자체 스케줄 실행 시간대(화~토 06:50~07:45 KST)에는 배포 차단, 헬스게이트+자동 롤백) + `deploy/server/{docker-compose.yml,Caddyfile,README.md}`. 배포 대상 `/opt/fida/`(kista-api와 **별도**의 독립 OCI 인스턴스 `168.110.113.178`, 자체 Caddy·자체 예약 공인 IP), `FIDA_DOMAIN=fida.kista-app.com`. 2026-08-04 07:00 KST 첫 네이티브 스케줄러 실행에서 배포 결함 2건 발견·수정 완료: ① secrets 파일 소유권이 non-root 컨테이너 UID/GID(appuser, 통상 100:101)와 안 맞아 `Permission denied` — README에 `chown` 절차 문서화, ② 서버 `.env` 개행 누락으로 `KISTA_URL`이 `INTERNAL_API_TOKEN`에 흡수돼 조용히 죽은 `kista-api.fly.dev`로 폴백 — `application.yml` 기본값을 `api.kista-app.com`으로 수정 + README에 `cat -A` 확인 경고 추가. 같은 날 수동 트리거(`POST /api/fida/orders`)로 스크래핑·OCR·시트·텔레그램·KISTA 저장까지 전체 파이프라인 성공 검증됨
-- **정식 자동 실행 경로는 내부 `FandingScheduler`(OCI 상시 기동), GH Actions는 수동 재실행 전용** — `.github/workflows/fida-schedule.yml`은 cron 트리거를 제거하고 `workflow_dispatch` 수동 재실행 전용으로 축소 (Gemini quota 캐시 로직은 재처리 대비 유지)
-- GitHub Secrets 등록 시 service-account.json: `base64 -i <경로>/service-account.json | tr -d '\n'` → `GOOGLE_SERVICE_ACCOUNT_JSON_B64`로 등록
-- **healthchecks.io dead-man's switch 설정 완료 (2026-08-04)** — `HeartbeatPort`/`HeartbeatAdapter`가 `FandingScheduler.run()` 성공 직후 핑 전송(`HEARTBEAT_URL` 미설정 시 핑 생략, 실패는 로그만 남기고 삼킴). 체크 slug `fida-scheduler`, schedule `0 7 * * 2-6` (tz `Asia/Seoul`, grace 1시간) — 화~토 07:00 KST 기준. `HEARTBEAT_URL`을 로컬·서버(`/opt/fida/.env`) 양쪽에 반영 후 서버 컨테이너 재생성 완료, ping 자체 도달 확인됨(`status: up`). 실제 스케줄 실행을 통한 전체 검증은 다음 실행(2026-08-05 07:00 KST)에서 확인 필요
-- **Render·Fly.io 완전 폐기 완료 (2026-08-04)** — `render.yaml` 삭제 + Render 서비스(`srv-d8m9vqcm0tmc73ct17ug`) CLI로 삭제 완료. Fly.io `kista-api` 앱은 확인 시점에 이미 삭제되어 있었음(별도 조치 불필요). fida UptimeRobot 모니터도 `fida.onrender.com` → `fida.kista-app.com`으로 전환 완료 — Render → OCI 이전 관련 작업 전부 종료
-- KISTA 프로젝트: https://github.com/narafu/kista.git (별도 프로젝트, FIDA가 전송한 주문을 수신해 KIS API로 실행)
-- **KISTA 주문 전송 활성화됨** — `TradingRecordService.process()`: sheet 기록 → 매매 알림 → KISTA 전송 순서. 시트/매매 알림 실패는 KISTA 전송을 막지 않고, KISTA 전송 이후 첫 실패를 예외로 전파(나머지는 suppressed) — 스케줄러 실패 알림·재시도 대상. KISTA 실패는 파이프라인 실패로 보지 않음(별도 실패 알림, `safeNotify`)
-- **`FandingScheduler` 07:00 실패 시 20분 후(07:20) 1회 재시도** (`TaskScheduler`, cron 변경 없음) — 재시도 실패는 알림만 남김. 재실행 안전 근거: KISTA가 `(releaseDate, ticker)` 유니크로 멱등(동일 내용 200, 내용 다르면 409 — OCR 재분석 결과가 달라지면 409 실패 알림 가능, 중복 주문은 없음), 시트는 고정 셀 덮어쓰기. 배포 가드는 06:50~07:45 KST
-- **KISTA 전송 결과(성공/실패)는 별도 텔레그램 메시지로 알림** — 매매 알림과 독립된 2개의 메시지
-- **KISTA 성공 알림**: 저장된 `UUID id` 앞 8자리 포함 (`KistaPort.sendOrders()` → `UUID` 반환, `KistaOrderResponse` DTO로 역직렬화)
-
-## Task Management
-
-- 작업 시작 전 `list_tasks`로 현재 태스크 확인
-- 태스크 상태 전이: `execute_task` (pending→in_progress) → 구현 → `verify_task` (in_progress→completed)
-- `verify_task` 직접 호출 불가 — 반드시 `execute_task` 먼저 호출해야 함
-- pending 태스크도 실제 코드가 이미 구현되어 있을 수 있으므로, `execute_task` 전에 현재 파일 상태 확인 권장
-- 규칙 초기화/변경 시: `init_project_rules` → `process_thought` → `split_tasks`
-- 태스크 추가: `split_tasks` with `updateMode: append`
-- 태스크 의존성 고아 발생 시 (split_tasks 재실행 후 stale ID 참조): `update_task(taskId, dependencies: [])` 로 수정
-
-## Secrets
-
-- `./secrets/service-account.json` — 로컬 원본: `/Users/phs/secret/google-sheet-secret.json` 복사. 디렉토리가 비어 있으면 스케줄러 실행 시 `FileNotFoundException` 발생. `secrets/`는 `.gitignore`에 등록돼 있어 git에 올라가지 않음
-- 서버 배포본: `/opt/fida/secrets/service-account.json` — 서버에서 직접 배치 (GitHub Actions가 생성하지 않음, kista-api `.env`/secrets 패턴과 동일)
-
-## Environment Variables
-
-`.env` 파일 사용 (`.env.example` 참조). 신규 변수 추가 시 `.env.example`도 반드시 동기화.
-
-| 변수 | 설명 |
-|------|------|
-| `GEMINI_API_KEY` | Gemini Vision API |
-| `FANDING_EMAIL` / `FANDING_PASSWORD` | fanding.kr 로그인 (playwright-server 전달) |
-| `GOOGLE_SHEETS_SPREADSHEET_ID` | 시트 ID |
-| `GOOGLE_SERVICE_ACCOUNT_JSON_PATH` | `/secrets/service-account.json` |
-| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | 텔레그램 알림 |
-| `INTERNAL_API_TOKEN` | KISTA 내부 인증 토큰 (`X-Internal-Token` 헤더) |
-| `FIDA_SCHEDULER_ENABLED` | `false`이면 `!job` 프로필에서도 내장 `FandingScheduler` 비활성화 (기본 `true`) |
-| `GEMINI_QUOTA_USAGE_PATH` | Gemini 일일 사용량 파일 경로 (기본 `/tmp/fida-gemini-quota-usage.json`) — GH Actions는 `/state/...`로 지정해 cache로 영속화, OCI 서버 `.env`도 `deploy/server/docker-compose.yml`의 `./.fida-state:/state` 마운트에 맞춰 `/state/...`로 지정해 컨테이너 재시작 간 영속화 |
-| `OCR_ARCHIVE_PATH` | OCR 회귀 자료(이미지·Gemini 원시 응답) 보관 루트 (기본 `/state/ocr-archive`, 60일 보관) — 서버·compose는 `/state` 마운트라 설정 불필요 |
-| `SCRAPER_URL` | 기본값 `http://playwright-server:3000/scrape` — 로컬/Docker Compose/OCI 서버 모두 컨테이너 이름 기반 기본값 그대로 사용, 별도 설정 불필요 |
-| `KISTA_URL` | `application.yml` 기본값 `https://api.kista-app.com` (kista-api OCI 인스턴스) — 변경 시에만 설정 |
-| `HEARTBEAT_URL` | healthchecks.io dead-man's switch 핑 URL — 미설정 시 `HeartbeatAdapter`가 핑 생략 (기본값 빈 문자열) |
-
-## Design Reference
-
-- n8n 원본 프로젝트 (비교 참조용): https://github.com/narafu/fanding-auto.git
-- fanding-auto 구현 파리티: 2026-05-07 전면 비교 완료. n8n의 `cash_balance`는 Gemini 프롬프트에 없어 항상 `-`이므로 FIDA의 `currentCycleStart` 표시가 올바름. 날짜 버그 외 추가 차이 없음
-- 전체 설계: `/Users/phs/.claude/plans/fanding-auto-trade-kis-n8n-linked-fountain.md` (FIDA 섹션)
-- 프로젝트 규칙 상세: `shrimp-rules.md` (Task Manager 자동 참조)
-- 어댑터 규칙 + File Interaction Rules: `src/main/java/com/fida/adapter/CLAUDE.md`
-- 도메인 제약: `src/main/java/com/fida/domain/CLAUDE.md`
-- playwright-server 특이사항: `playwright-server/CLAUDE.md`
-- KISTA API 스펙: `POST /api/internal/fida-orders` body `{tradeDate, ticker, currentCycleStart, currentCycleRealizedPnl, avgPrice, holdings, orders[{orderType, direction, quantity, price}]}` — OpenAPI docs: `{KISTA_URL}/api-docs`
-  - 응답: `{id(UUID), tradeDate, ticker, ...}` — `KistaOrderResponse(UUID id)`로 역직렬화 (나머지 필드는 무시)
-  - 요청 헤더: `X-Internal-Token: ${kista.internal-token}` (내부 인증)
-- KISTA ticker: `"SOXL"` 고정 (`KistaAdapter` 상수). orders 배열은 BUY 먼저 SELL 나중 순서. null price → ZERO, `"전부"` qty → null (전량 주문), null/비파싱 qty → 0 fallback
-- `Order.quantity` 타입: `Integer` (nullable) — `"전부"` 입력 시 null 전송으로 KISTA 전량 주문 처리
+- 서버 포트 **7070** (KISTA가 8080 사용). Dockerfile `EXPOSE`, compose healthcheck도 7070
+- DB 없음 (JPA/DataSource 추가 금지), HTTP는 RestTemplate 전용 (WebClient 금지)
+- 스케줄 화~토 07:00 KST (`cron = "0 0 7 * * TUE-SAT"`, 변경 금지). 정식 실행 경로는 OCI 상시 서버의 `FandingScheduler`
+- KISTA 전송 실패는 파이프라인 실패가 아니다 (별도 실패 알림)
+- Gemini 모델 `gemini-2.5-flash-lite` 고정
+- Google Sheets 셀 범위 고정: `A1, C2:D4, C5:D7, A8, C8, D8`. **A8 = "현사이클 시작"**(`current_cycle_start`) — "잔금"과 혼동 금지
+- springdoc 2.7.0+ 유지 — 2.6.x는 Spring Framework 6.2와 `NoSuchMethodError: ControllerAdviceBean` 충돌
+- Lombok `@Value` 설정 필드는 **non-final** — `final`+`@Value`는 CI에서 `No qualifying bean of type 'String'`. 테스트에서는 `ReflectionTestUtils.setField`로 값 주입
+- Mockito로 `RestTemplate.postForObject` 스텁 시 URL 매처는 `any()` 대신 `anyString()` (varargs 오버로드)
+- 서브에이전트가 Java import를 고치며 BOM을 넣어 `compileJava`가 깨진 사례가 있다. 일괄 제거: `grep -rl $'\xef\xbb\xbf' src --include="*.java" | while read f; do sed -i '' '1s/^\xef\xbb\xbf//' "$f"; done`
+- 커밋 전 author 확인: `narafu <narafu@kakao.com>`

@@ -4,5 +4,4 @@
 
 - 루트 가이드: [CLAUDE.md](CLAUDE.md)
 - 어댑터 규칙: `src/main/java/com/fida/adapter/CLAUDE.md`
-- 도메인 제약: `src/main/java/com/fida/domain/CLAUDE.md`
 - playwright-server 특이사항: `playwright-server/CLAUDE.md`

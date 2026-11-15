@@ -2,37 +2,30 @@
 
 의존성 방향: `adapter → (Port 경유) → application`. application 구현체 직접 참조 금지.
 
-## File Interaction Rules
+## 함께 수정할 파일
 
 | 수정 파일 | 함께 수정 필요 |
 |-----------|---------------|
-| `domain/model` 필드 변경 | 관련 Port, TradingRecordService, 연관 Adapter |
-| `ParsedOrder` 필드 변경 | `OcrResultReconciler` 보정 로직 동기화 |
-| `TradingRecord` 필드 변경 | `GoogleSheetsAdapter`, `TelegramAdapter` 메시지 포맷 |
-| 새 환경변수 추가 | `.env.example` 반드시 업데이트 |
-| 옵셔널 아웃바운드 어댑터 추가 | `application.yml`에 `url: ${VAR:}` 추가 + `@ConditionalOnProperty("x.url")` + 포트를 `Optional<XxxPort>`로 주입 |
+| `domain/model` 필드 | 관련 Port, `TradingRecordService`, 연관 Adapter |
+| `ParsedOrder` 필드 | `OcrResultReconciler` 보정 로직 |
+| `TradingRecord` 필드 | `GoogleSheetsAdapter`, `TelegramAdapter` 메시지 포맷 |
+| 새 환경변수 | `.env.example` (변수마다 주석 한 줄) |
+| 옵셔널 아웃바운드 어댑터 | `application.yml`에 `url: ${VAR:}` + `@ConditionalOnProperty("x.url")` + `Optional<XxxPort>` 주입 |
 
-## Lazy Bean 패턴
+## Lazy Bean 3단 설정 (Google Sheets)
 
-외부 파일/자격증명을 읽는 `@Bean`(예: GoogleSheetsConfig): `@Bean @Lazy` + `@Component @Lazy` + 주입 지점 `@Lazy InterfacePort` 3단 설정 필수 — 하나라도 빠지면 Spring 기동 시 파일 읽기 실패.
+외부 파일·자격증명을 읽는 `@Bean`(`GoogleSheetsConfig`)은 `@Bean @Lazy` + `@Component @Lazy` + 주입 지점 `@Lazy SheetPort` 3단이 모두 필요하다. 하나라도 빠지면 기동 시 파일 읽기에 실패한다. `TradingRecordService`가 `@RequiredArgsConstructor` 대신 명시적 생성자를 쓰는 이유다.
 
 ## 아웃바운드 OCR
 
-- 구조: `GeminiClient`(프롬프트·HTTP 1회 호출·quota·오류 분류, 503만 원본 예외로 전파) / `GeminiResponseParser`(텍스트→DTO) / `OcrResultReconciler`(순수 보정·경고 수집) / `GeminiVisionAdapter`(3회 재시도 루프, 최종 채택 결과의 경고만 알림)
-- `GeminiClient`: HTTP 429 quota exceeded는 `OcrException("Gemini API 일일한도 초과")`로 분류하고, 기존 Gemini 오류 알림 동작은 유지
-- 매도 OCR은 `sell_rows`에 빈 행을 포함한 물리적 3개 행을 순서대로 유지하고, 정규화된 `sell`이 비었을 때만 값이 있는 행을 폴백으로 사용
-- `sell`이 비어있지 않아도 `sell_rows`의 유효 행 수가 더 많으면(부분 누락) `sell_rows` 전체로 대체 — `OcrResultReconciler.resolveSellOrders()` 참조
-- 프롬프트는 화면 위치가 아닌 라벨 텍스트 기준으로 작성 — fanding 매매표 레이아웃이 바뀌어도 위치 힌트가 엉뚱한 행(예: 하단 왼쪽 "누적실현수익")을 가리키지 않게 하기 위함
-- 보유수량은 `holding_qty`·`cumulative_qty` 두 후보로만 결정(`OcrResultReconciler.resolveHoldings()`), 배율 검증 없는 `holdings` 필드는 폐기. 수량 후보는 `BigDecimal`로 받아 소수 값(금액 오독)이면 제외 + OCR 경고
-- 요청은 JSON 모드(`generationConfig.responseMimeType=application/json`) — 코드펜스·한글 후처리는 방어적으로 유지
+- 구조: `GeminiClient`(HTTP 1회·quota·오류 분류) / `GeminiResponseParser`(텍스트→DTO) / `OcrResultReconciler`(순수 보정·경고) / `GeminiVisionAdapter`(3회 재시도, 최종 결과의 경고만 알림)
+- HTTP 429·`RESOURCE_EXHAUSTED`는 `OcrException("Gemini API 일일한도 초과")`로 분류 — 일반 통신 오류로 뭉개지 않는다
+- 매도: `sell_rows`는 빈 행 포함 물리 3행 순서 유지. `sell`이 비었거나 `sell_rows` 유효 행이 더 많으면(부분 누락) `sell_rows`로 대체 (`resolveSellOrders()`)
+- 보유수량은 `holding_qty`·`cumulative_qty` 두 후보로만 결정 (`resolveHoldings()`). 소수 값은 금액 오독으로 보고 제외 + 경고
+- 프롬프트는 화면 위치가 아닌 라벨 텍스트 기준 — 레이아웃이 바뀌면 위치 힌트가 엉뚱한 행(하단 "누적실현수익")을 가리킨다
+- JSON 모드(`responseMimeType=application/json`)를 쓰지만 코드펜스·한글 후처리는 방어적으로 유지
 
-## 인바운드 웹 레이어
+## 스케줄
 
-- `FidaOrderController`: 1개 엔드포인트 — `POST /orders`(204, 바디 없음)
-- `GlobalExceptionHandler`: `@RestControllerAdvice` 전역 예외 처리 — 새 예외 타입 추가 시 여기도 확인
-- `OpenApiConfig`: Swagger UI 설정 — springdoc 버전은 루트 CLAUDE.md Key Constraints 참조
-
-## 인바운드 스케줄 레이어
-
-- `FandingScheduler`: `fida.scheduler.enabled=true`일 때만 활성화. OCI 상시 기동 서버에서의 정식 자동 실행 경로이며, `FIDA_SCHEDULER_ENABLED`(기본 `true`)로 제어
-- 07:00 실행 실패 시 `TaskScheduler`로 20분 후 1회만 재시도(07:00 기동 시점 기준 07:20, 재시도 실패는 알림만, 추가 예약 없음). 예약은 메모리상이라 대기 중 재기동·배포 시 유실 — 배포 가드(06:50~07:45 KST)가 유일한 보호
+- 07:00 실패 시 `TaskScheduler`로 20분 뒤 1회만 재시도(재시도 실패는 알림만). 예약은 메모리상이라 대기 중 재기동·배포 시 유실된다 — 배포 금지 창(화~토 06:50~07:45 KST)이 유일한 보호
+- 재실행이 안전한 근거: KISTA가 `(releaseDate, ticker)` 유니크로 멱등(같은 내용 200, 다르면 409 — 중복 주문 없음), 시트는 고정 셀 덮어쓰기
