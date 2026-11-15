@@ -29,6 +29,10 @@
    - 20거래일 뒤가 `03` 태스크 4 시작 시점이다. 화~토 실행 기준 2026-12-12(토)쯤이고, 미국 휴장일만큼 늦어진다. 날짜 폴더가 20개 이상인지로 판정한다
    - infra 이전 시 `/opt/fida/.fida-state/ocr-archive/`를 옮긴다(uid 100:101 소유)
 3. `04` 태스크 7 (pre-apply 훅) — 완료 (2026-11-15, 커밋 d57e133, `--self-test`는 macOS·ubuntu 양쪽 통과) → infra 이전 → `04` 태스크 8
+   - 태스크 8 중 bundle 계약 부분을 이전 전으로 당김 (2026-11-15, 브랜치 `infra-bundle`, main 미병합). `roles`·`images`·`caddy/fida.caddy` 추가, compose에서 caddy 삭제(`shared_net` + 전용 `browser_net`, mem_limit 1024m/2048m), `Caddyfile` 삭제, `server-deploy.yml` SSH 배포를 infra `repository_dispatch`로 교체, README 축소
+   - **main 병합 = 컷오버.** 병합하면 구 SSH 배포가 사라지고 infra로 dispatch한다. 이전 당일 사용자 승인 뒤 병합한다. 그 전에 main에 커밋하면 구 SSH 배포가 fida-server에 그대로 나간다(paths 필터 없음)
+   - 병합 전 필요: fida 레포 `vars.INFRA_APP_CLIENT_ID`·`secrets.INFRA_APP_PRIVATE_KEY`, infra `state/fida.yml`(roles 2개)·`secrets/fida.env`(`FANDING_*` 포함), kista-infra bbeed69 push
+   - 태스크 8에 남은 것: `KISTA_URL`을 `http://caddy:8080`으로(infra 내부 리스너 배포 뒤, infra 소유 env), playwright `read_only`·`cap_drop: ALL` 검토
 4. ~~`04` 태스크 1~4·6~~ — 완료 (2026-11-15). 루트 `CLAUDE.md` 58줄, 환경변수 기준은 `.env.example`, 승인된 삭제 후보 삭제(`AGENTS.md` 유지), 메모리 3건 삭제
    - `04` 태스크 5: infra 이전이 1~2주 안이라 워크플로 수정은 건너뜀(reconcile.sh가 맡음). 2026-11-15 서버 수동 정리로 실행 중(67b8840)·직전(3562d4a) 이미지만 남기고 fida 태그 42개 삭제. `docker images | grep -c fida` = 4, 디스크 31G에서 8.2G로. 이전이 늦어지면 같은 정리를 다시 한다
 5. `03` 태스크 4 이후는 회귀 자료 20건 이후(약 4주)

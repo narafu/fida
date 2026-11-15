@@ -1,0 +1,3 @@
+# role별 이미지 repo — kista-infra build-bundle.sh가 읽는다(없는 role은 ghcr.io/narafu/fida)
+playwright-server=ghcr.io/narafu/fida-playwright-server
+fida=ghcr.io/narafu/fida

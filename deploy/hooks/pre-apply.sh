@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # kista-infra reconcile.yml이 서버 적용 직전 app 디렉터리에서 인자 없이 실행하는 fida hook — 배포 금지 창 검사.
 # 배포가 실행 중인 스케줄 스레드를 강제 종료해 매매 기록 처리가 유실될 수 있어, 스케줄러 구간(07:00 기동, 실패 시 07:20 재시도)에는 차단.
-# 규칙은 .github/workflows/server-deploy.yml 배포 가드와 동일: KST 화~토 06:50~07:45 (양끝 포함). exit 1이면 적용 차단.
+# 배포 금지 창의 유일한 기준(구 server-deploy.yml SSH 배포 가드를 대체): KST 화~토 06:50~07:45 (양끝 포함). exit 1이면 적용 차단.
 # 사용: (인자 없음)=현재 시각 판정 | --check "YYYY-MM-DD HH:MM"=해당 KST 시각 판정 | --self-test=경계 표 검증
 set -euo pipefail
 

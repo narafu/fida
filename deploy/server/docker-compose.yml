@@ -1,3 +1,8 @@
+# fida 배포 bundle — kista-infra reconcile.sh가 `-p fida --project-directory /opt/fida`로 roles 순서(playwright-server → fida)대로 적용한다
+# .env·secrets/·.fida-state/는 /opt/fida 기준이라 release 디렉토리가 바뀌어도 유지된다. .env는 infra(secrets/fida.env)가 렌더링하므로 서버에서 직접 편집하지 말 것
+# caddy는 이 파일 소관이 아니다 — kista-infra Caddy가 caddy/fida.caddy 스니펫으로 /actuator/health만 공개한다
+# bluegreen 파일 없음 — 스케줄러가 이중 실행되면 안 되므로 전부 stop-first
+
 services:
   fida:
     image: ${FIDA_IMAGE:?FIDA_IMAGE is required}
@@ -10,7 +15,10 @@ services:
       playwright-server:
         condition: service_healthy
     expose: ["7070"]
-    mem_limit: 1536m   # 호스트 6GB 보호 — 평시 ~360MiB, JVM 힙은 MaxRAMPercentage=75%로 이 한도 기준
+    networks:
+      - shared_net   # kista-infra Caddy 라우팅용 — data_net(postgres/redis)은 가입하지 않음
+      - browser_net  # playwright-server 호출용
+    mem_limit: 1024m   # 평시 ~360MiB, JVM 힙은 MaxRAMPercentage=75%로 이 한도 기준 (fable-infra 03 4-3)
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:7070/actuator/health"]
       interval: 30s
@@ -22,10 +30,13 @@ services:
   playwright-server:
     image: ${PLAYWRIGHT_SERVER_IMAGE:?PLAYWRIGHT_SERVER_IMAGE is required}
     container_name: fida-playwright-server
+    # env_file 없음 — 브라우저 컨테이너에는 필요한 값만 준다 (fable-infra 03 4-4)
     environment:
       FANDING_EMAIL: ${FANDING_EMAIL}
       FANDING_PASSWORD: ${FANDING_PASSWORD}
-    mem_limit: 3g   # 호스트 6GB 보호 — 스크롤 제거 후 Chromium 피크 ~1.2GiB 실측(이전 무한 스크롤 시 ~1.8GiB로 1536m 제한에서 OOM, 2026-10-31)
+    networks:
+      - browser_net  # fida와만 통한다 — Fanding 스크래핑 egress가 필요해 internal 아님
+    mem_limit: 2048m   # Chromium 피크 ~1.2GiB 실측. 2g 아래 금지(2026-10-31 1536m에서 OOM)
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
       interval: 30s
@@ -33,26 +44,7 @@ services:
       retries: 3
     restart: unless-stopped
 
-  caddy:
-    image: caddy:2.9-alpine   # 버전 핀 — 무빙 태그 방지
-    container_name: fida-caddy
-    environment:
-      FIDA_DOMAIN: ${FIDA_DOMAIN}   # env_file(.env 전체 주입) 대신 필요한 값만 — GEMINI_API_KEY 등 secret이 리버스 프록시 컨테이너에 노출되지 않도록
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    mem_limit: 64m
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "20m"
-        max-file: "3"
-
-volumes:
-  caddy_data:
-  caddy_config:
+networks:
+  shared_net:
+    external: true   # kista-infra가 생성 — 이 파일은 참여만 함
+  browser_net: {}    # 프로젝트 전용(fida_browser_net)
