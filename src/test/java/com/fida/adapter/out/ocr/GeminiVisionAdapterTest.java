@@ -1,7 +1,8 @@
 package com.fida.adapter.out.ocr;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fida.domain.exception.OcrException;
-import com.fida.domain.model.OrderItem;
 import com.fida.domain.model.ParsedOrder;
 import com.fida.domain.port.out.NotifyPort;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,12 +17,12 @@ import org.springframework.web.client.RestTemplate;
 import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -39,6 +40,8 @@ class GeminiVisionAdapterTest {
     private static final String API_KEY = "test-key";
     private static final String GEMINI_ENDPOINT =
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent";
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper(); // 픽스처 → 응답 봉투 직렬화
 
     private RestTemplate restTemplate;
     private MockRestServiceServer mockServer;
@@ -59,39 +62,9 @@ class GeminiVisionAdapterTest {
     }
 
     @Test
-    @DisplayName("Gemini 응답을 ParsedOrder로 정상 파싱한다")
-    void analyze_parses_gemini_response_to_parsedOrder() {
-        String geminiJson = """
-                {
-                  "candidates": [{
-                    "content": {
-                      "parts": [{"text": "{\\"buy\\":[{\\"price\\":75000,\\"qty\\":100}],\\"sell\\":[{\\"price\\":80000,\\"qty\\":\\"ALL\\"}],\\"current_cycle_start\\":1000000,\\"avg_price\\":72000,\\"holding_qty\\":200}"}]
-                    }
-                  }]
-                }
-                """;
-        mockServer.expect(requestTo(GEMINI_ENDPOINT))
-                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
-
-        ParsedOrder result = adapter.analyze(List.of(new byte[]{1, 2, 3}));
-
-        assertThat(result.buyOrders()).hasSize(1);
-        assertThat(result.buyOrders().get(0).price()).isEqualByComparingTo(new BigDecimal("75000"));
-        assertThat(result.buyOrders().get(0).qty()).isEqualTo("100");
-        assertThat(result.sellOrders()).hasSize(1);
-        assertThat(result.sellOrders().get(0).qty()).isEqualTo("ALL");
-        assertThat(result.currentCycleStart()).isEqualByComparingTo(new BigDecimal("1000000"));
-        assertThat(result.avgPrice()).isEqualByComparingTo(new BigDecimal("72000"));
-        assertThat(result.holdings()).isEqualTo(200);
-        mockServer.verify();
-    }
-
-    @Test
     @DisplayName("```json 블록으로 감싸인 응답도 파싱한다")
     void analyze_parses_json_fenced_block() {
-        String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"```json\\n{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holding_qty\\":0}\\n```"}]}}]}
-                """;
+        String geminiJson = envelope("fenced-empty");
         mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
@@ -99,35 +72,6 @@ class GeminiVisionAdapterTest {
 
         assertThat(result.buyOrders()).isEmpty();
         assertThat(result.holdings()).isZero();
-    }
-
-    @Test
-    @DisplayName("holdings가 음수이면 0으로 보정한다")
-    void analyze_corrects_negative_holdings_to_zero() {
-        String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":72000,\\"holding_qty\\":-5}"}]}}]}
-                """;
-        mockServer.expect(requestTo(GEMINI_ENDPOINT))
-                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
-
-        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
-
-        assertThat(result.holdings()).isZero();
-        assertThat(result.avgPrice()).isNull();
-    }
-
-    @Test
-    @DisplayName("holdings가 0이면 avgPrice를 null로 강제한다")
-    void analyze_nullifies_avgPrice_when_holdings_zero() {
-        String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":72000,\\"holding_qty\\":0}"}]}}]}
-                """;
-        mockServer.expect(requestTo(GEMINI_ENDPOINT))
-                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
-
-        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
-
-        assertThat(result.avgPrice()).isNull();
     }
 
     @Test
@@ -146,6 +90,16 @@ class GeminiVisionAdapterTest {
         String prompt = GeminiClient.PROMPT;
 
         assertThat(prompt).contains("분수 형태").contains("capital_rows에 절대 포함하지 말 것");
+    }
+
+    // 픽스처 본문을 Gemini generateContent 응답 봉투로 감싼다
+    private static String envelope(String fixture) {
+        try {
+            return OBJECT_MAPPER.writeValueAsString(Map.of("candidates", List.of(
+                    Map.of("content", Map.of("parts", List.of(Map.of("text", OcrFixtures.load(fixture))))))));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     @Test
@@ -183,9 +137,7 @@ class GeminiVisionAdapterTest {
     @Test
     @DisplayName("503 오류 후 재시도에서 성공하면 정상 결과를 반환한다")
     void analyze_succeeds_after_503_retry() {
-        String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holding_qty\\":0}"}]}}]}
-                """;
+        String geminiJson = envelope("empty-holdings-zero");
         mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
         mockServer.expect(requestTo(GEMINI_ENDPOINT))
@@ -225,197 +177,6 @@ class GeminiVisionAdapterTest {
     }
 
     @Test
-    @DisplayName("sell 앞 행이 모두 null이고 마지막 행에만 값이 있어도 sell을 파싱한다")
-    void analyze_parses_sell_when_only_last_row_has_data() {
-        // 오늘 실제 발생 케이스: Gemini가 sell=[] 반환 → 이 테스트는 Java 필터 로직 검증
-        String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":233.84,\\"qty\\":4},{\\"price\\":234.46,\\"qty\\":4}],\\"sell\\":[{\\"price\\":null,\\"qty\\":null},{\\"price\\":null,\\"qty\\":null},{\\"price\\":236.54,\\"qty\\":\\"ALL\\"}],\\"current_cycle_start\\":13977.43,\\"current_cycle_realized_pnl\\":200.68,\\"avg_price\\":225.746,\\"holding_qty\\":4}"}]}}]}
-                """;
-        mockServer.expect(requestTo(GEMINI_ENDPOINT))
-                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
-
-        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
-
-        assertThat(result.buyOrders()).hasSize(2);
-        assertThat(result.sellOrders()).hasSize(1);
-        assertThat(result.sellOrders().get(0).price()).isEqualByComparingTo(new BigDecimal("236.54"));
-        assertThat(result.sellOrders().get(0).qty()).isEqualTo("ALL");
-        mockServer.verify();
-    }
-
-    @Test
-    @DisplayName("sell이 비어도 sell_rows의 마지막 유효 행에서 매도 주문을 복구한다")
-    void analyze_recovers_sell_from_sell_rows_when_sell_is_empty() {
-        // 운영 사례: 앞의 두 매도 행이 비어 있어 Gemini가 정규화된 sell 배열에서 마지막 주문까지 누락함
-        String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":110.96,\\"qty\\":7},{\\"price\\":111.24,\\"qty\\":7}],\\"sell\\":[],\\"sell_rows\\":[{\\"price\\":null,\\"qty\\":null},{\\"price\\":null,\\"qty\\":null},{\\"price\\":112.79,\\"qty\\":\\"ALL\\"}],\\"current_cycle_start\\":12001.10,\\"current_cycle_realized_pnl\\":0,\\"avg_price\\":111.262,\\"cumulative_qty\\":7,\\"holdings\\":7}"}]}}]}
-                """;
-        mockServer.expect(requestTo(GEMINI_ENDPOINT))
-                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
-
-        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
-
-        assertThat(result.sellOrders()).containsExactly(new OrderItem(new BigDecimal("112.79"), "ALL"));
-        verify(notifyPort).notifyOcrWarning(contains("sell_rows"));
-        mockServer.verify();
-    }
-
-    @Test
-    @DisplayName("sell과 sell_rows의 세 행이 모두 비어 있으면 매도 주문을 만들지 않는다")
-    void analyze_keeps_sell_empty_when_all_sell_rows_are_empty() {
-        String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"sell_rows\\":[{\\"price\\":null,\\"qty\\":null},{\\"price\\":null,\\"qty\\":null},{\\"price\\":null,\\"qty\\":null}],\\"current_cycle_start\\":12001.10,\\"avg_price\\":111.262,\\"cumulative_qty\\":7,\\"holdings\\":7}"}]}}]}
-                """;
-        mockServer.expect(requestTo(GEMINI_ENDPOINT))
-                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
-
-        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
-
-        assertThat(result.sellOrders()).isEmpty();
-        mockServer.verify();
-    }
-
-    @Test
-    @DisplayName("sell에 주문이 있으면 sell_rows를 폴백으로 중복 추가하지 않는다")
-    void analyze_prefers_sell_over_sell_rows() {
-        String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[{\\"price\\":112.79,\\"qty\\":\\"ALL\\"}],\\"sell_rows\\":[{\\"price\\":null,\\"qty\\":null},{\\"price\\":null,\\"qty\\":null},{\\"price\\":112.79,\\"qty\\":\\"ALL\\"}],\\"current_cycle_start\\":12001.10,\\"avg_price\\":111.262,\\"cumulative_qty\\":7,\\"holdings\\":7}"}]}}]}
-                """;
-        mockServer.expect(requestTo(GEMINI_ENDPOINT))
-                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
-
-        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
-
-        assertThat(result.sellOrders()).containsExactly(new OrderItem(new BigDecimal("112.79"), "ALL"));
-        mockServer.verify();
-    }
-
-    @Test
-    @DisplayName("sell에 유효 행이 있어도 sell_rows에 더 많은 유효 행이 있으면 sell_rows로 부분 누락을 복구한다")
-    void analyze_recovers_sell_from_sell_rows_when_sell_partially_drops_valid_rows() {
-        // 운영 사례(2026-05-28): 매도가 2행(218.23/4주)이 sell 배열에서 누락되고 3행(218.92/남은전부)만 남아
-        // KISTA로 SELL 1건만 전송됨. sell_rows에는 2행이 온전히 보존되어 있어 이를 근거로 복구한다.
-        String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":216.84,\\"qty\\":4},{\\"price\\":217.77,\\"qty\\":4}],\\"sell\\":[{\\"price\\":218.92,\\"qty\\":\\"ALL\\"}],\\"sell_rows\\":[{\\"price\\":null,\\"qty\\":null},{\\"price\\":218.23,\\"qty\\":4},{\\"price\\":218.92,\\"qty\\":\\"ALL\\"}],\\"current_cycle_start\\":13158.78,\\"current_cycle_realized_pnl\\":0,\\"avg_price\\":217.897,\\"cumulative_qty\\":7,\\"holdings\\":7}"}]}}]}
-                """;
-        mockServer.expect(requestTo(GEMINI_ENDPOINT))
-                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
-
-        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
-
-        assertThat(result.sellOrders()).containsExactly(
-                new OrderItem(new BigDecimal("218.23"), "4"),
-                new OrderItem(new BigDecimal("218.92"), "ALL"));
-        verify(notifyPort).notifyOcrWarning(contains("부분 누락"));
-        mockServer.verify();
-    }
-
-    @Test
-    @DisplayName("holdings가 0이어도 cumulative_qty가 있으면 이를 우선 사용한다")
-    void analyze_prefers_cumulative_qty_when_holdings_is_zero() {
-        String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":39.39,\\"qty\\":27},{\\"price\\":39.15,\\"qty\\":28}],\\"sell\\":[{\\"price\\":39.73,\\"qty\\":\\"ALL\\"}],\\"current_cycle_start\\":14063.31,\\"current_cycle_realized_pnl\\":289.54,\\"avg_price\\":35.564,\\"holdings\\":0,\\"cumulative_qty\\":27,\\"buy_qty\\":-57}"}]}}]}
-                """;
-        mockServer.expect(requestTo(GEMINI_ENDPOINT))
-                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
-
-        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
-
-        assertThat(result.sellOrders()).hasSize(1);
-        assertThat(result.holdings()).isEqualTo(27);
-        assertThat(result.avgPrice()).isEqualByComparingTo(new BigDecimal("35.564"));
-        mockServer.verify();
-    }
-
-    @Test
-    @DisplayName("holding_qty와 cumulative_qty가 다르면 누적개수를 우선하고 경고한다")
-    void analyze_prefers_cumulative_qty_and_warns_when_holding_candidates_disagree() {
-        // 운영 사례: 매수개수 57을 holding_qty로 오인식했지만 누적개수는 74로 정확히 파싱됨
-        String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":26.10,\\"qty\\":32},{\\"price\\":26.30,\\"qty\\":32}],\\"sell\\":[{\\"price\\":26.64,\\"qty\\":\\"ALL\\"},{\\"price\\":26.45,\\"qty\\":29}],\\"current_cycle_start\\":11085.99,\\"current_cycle_realized_pnl\\":73.53,\\"avg_price\\":26.525,\\"holding_qty\\":57,\\"cumulative_qty\\":74,\\"buy_qty\\":57,\\"holdings\\":74}"}]}}]}
-                """;
-        mockServer.expect(requestTo(GEMINI_ENDPOINT))
-                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
-
-        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
-
-        assertThat(result.holdings()).isEqualTo(74);
-        verify(notifyPort).notifyOcrWarning(contains("holding_qty=57, cumulative_qty=74"));
-        mockServer.verify();
-    }
-
-    @Test
-    @DisplayName("cumulative_qty가 holding_qty와 10배 이상 벌어지면 환각으로 보고 holding_qty를 사용한다")
-    void analyze_prefers_holding_qty_when_cumulative_qty_is_magnitude_mismatch() {
-        // 운영 사례(2026-08-21): "누적개수" 표가 없는 이미지에서 누적실현수익(4,913.84)을
-        // cumulative_qty=4913으로 환각 응답, 실제 보유수량은 holding_qty=49
-        String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":119.76,\\"qty\\":8},{\\"price\\":122.01,\\"qty\\":9}],\\"sell\\":[{\\"price\\":152.18,\\"qty\\":7},{\\"price\\":127.67,\\"qty\\":7},{\\"price\\":122.45,\\"qty\\":8}],\\"current_cycle_start\\":14467.67,\\"current_cycle_realized_pnl\\":446.16,\\"avg_price\\":130.175,\\"holding_qty\\":49,\\"cumulative_qty\\":4913,\\"holdings\\":4913}"}]}}]}
-                """;
-        mockServer.expect(requestTo(GEMINI_ENDPOINT))
-                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
-
-        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
-
-        assertThat(result.holdings()).isEqualTo(49);
-        verify(notifyPort).notifyOcrWarning(contains("holding_qty=49, cumulative_qty=4913"));
-        mockServer.verify();
-    }
-
-    @Test
-    @DisplayName("holding_qty가 명시적으로 0이어도 cumulative_qty와 배율 이상 벌어지면 환각으로 보고 0을 사용한다")
-    void analyze_prefers_explicit_zero_holding_qty_when_cumulative_qty_is_magnitude_mismatch() {
-        // 운영 사례(2026-09-21): "현재 보유 개수"가 명시적으로 0인 이미지에서 누적실현수익(4,299.87)을
-        // cumulative_qty=4299로 환각 응답. 기존 코드는 holding_qty가 0(비양수)이면 비교 자체를 건너뛰어
-        // 환각값 4299를 그대로 보유수량으로 사용하는 결함이 있었음
-        String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":151.83,\\"qty\\":6},{\\"price\\":141.78,\\"qty\\":7}],\\"sell\\":[],\\"current_cycle_start\\":14299.87,\\"current_cycle_realized_pnl\\":0,\\"avg_price\\":null,\\"holding_qty\\":0,\\"cumulative_qty\\":4299,\\"holdings\\":4299}"}]}}]}
-                """;
-        mockServer.expect(requestTo(GEMINI_ENDPOINT))
-                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
-
-        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
-
-        assertThat(result.holdings()).isEqualTo(0);
-        assertThat(result.avgPrice()).isNull();
-        verify(notifyPort).notifyOcrWarning(contains("holding_qty=0, cumulative_qty=4299"));
-        mockServer.verify();
-    }
-
-    @Test
-    @DisplayName("cumulative_qty에 소수 금액이 오면 수량 후보에서 제외하고 holding_qty를 사용한다")
-    void analyze_rejects_decimal_cumulative_qty_as_misread_amount() {
-        // 운영 사례(2026-09-28): 누적실현수익 $4,347.11이 cumulative_qty로 들어옴 — Integer로 받으면 4347로 조용히 잘렸음
-        String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":141.72,\\"qty\\":7},{\\"price\\":142.14,\\"qty\\":7}],\\"sell\\":[{\\"price\\":142.67,\\"qty\\":7},{\\"price\\":143.04,\\"qty\\":\\"ALL\\"}],\\"current_cycle_start\\":14347.11,\\"current_cycle_realized_pnl\\":0,\\"avg_price\\":142.450,\\"holding_qty\\":13,\\"cumulative_qty\\":4347.11}"}]}}]}
-                """;
-        mockServer.expect(requestTo(GEMINI_ENDPOINT))
-                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
-
-        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
-
-        assertThat(result.holdings()).isEqualTo(13);
-        verify(notifyPort).notifyOcrWarning(contains("cumulative_qty=4347.11"));
-        mockServer.verify();
-    }
-
-    @Test
-    @DisplayName("holding_qty·cumulative_qty가 모두 없으면 holdings 필드 값을 쓰지 않고 0으로 본다")
-    void analyze_ignores_unguarded_holdings_field() {
-        // holdings 필드는 프롬프트에서 제거됨 — 과거 응답처럼 환각값(4913)이 실려와도 배율 검증 없는 경로로 채택하지 않음
-        String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holdings\\":4913}"}]}}]}
-                """;
-        mockServer.expect(requestTo(GEMINI_ENDPOINT))
-                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
-
-        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
-
-        assertThat(result.holdings()).isZero();
-        mockServer.verify();
-    }
-
-    @Test
     @DisplayName("프롬프트는 누적실현수익 등 금액을 수량 필드에 넣지 않도록 안내한다")
     void prompt_forbids_amounts_in_quantity_fields() {
         String prompt = GeminiClient.PROMPT;
@@ -428,27 +189,9 @@ class GeminiVisionAdapterTest {
     }
 
     @Test
-    @DisplayName("current_cycle_start가 null이면 자금 표의 현사이클 시작 행으로 보정한다")
-    void analyze_falls_back_to_capital_row_when_current_cycle_start_is_null() {
-        // 운영 사례: Gemini가 오른쪽 상단 자금 표는 읽었지만 current_cycle_start 필드만 null로 반환
-        String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":25.95,\\"qty\\":34},{\\"price\\":26.20,\\"qty\\":34}],\\"sell\\":[{\\"price\\":26.48,\\"qty\\":33},{\\"price\\":26.33,\\"qty\\":32},{\\"price\\":27.50,\\"qty\\":30}],\\"current_cycle_start\\":null,\\"capital_rows\\":[{\\"label\\":\\"시즌1 시작원금\\",\\"value\\":10000.00},{\\"label\\":\\"현사이클 시작\\",\\"value\\":11783.18},{\\"label\\":\\"잔금\\",\\"value\\":8283.77}],\\"current_cycle_realized_pnl\\":-17.61,\\"avg_price\\":27.202,\\"cumulative_qty\\":128,\\"holdings\\":128}"}]}}]}
-                """;
-        mockServer.expect(requestTo(GEMINI_ENDPOINT))
-                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
-
-        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
-
-        assertThat(result.currentCycleStart()).isEqualByComparingTo(new BigDecimal("11783.18"));
-        mockServer.verify();
-    }
-
-    @Test
     @DisplayName("동일 이미지에 항상 같은 결과를 얻기 위해 temperature 0을 요청에 포함한다")
     void request_includes_zero_temperature_for_deterministic_output() {
-        String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holding_qty\\":0}"}]}}]}
-                """;
+        String geminiJson = envelope("empty-holdings-zero");
         mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andExpect(content().string(containsString("\"temperature\":0")))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
@@ -462,9 +205,7 @@ class GeminiVisionAdapterTest {
     @DisplayName("current_cycle_start가 season_start_capital과 같으면 혼동 가능성을 경고 로그로 남긴다")
     void analyze_warns_when_current_cycle_start_matches_season_start_capital() {
         // 운영 사례: "현사이클 시작 $"과 "시즌1 시작원금 $"을 혼동해 같은 값(10000.00)을 반환한 케이스 재현
-        String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":10000.00,\\"season_start_capital\\":10000.00,\\"avg_price\\":null,\\"holding_qty\\":0}"}]}}]}
-                """;
+        String geminiJson = envelope("season-capital-match");
         mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
@@ -476,59 +217,9 @@ class GeminiVisionAdapterTest {
     }
 
     @Test
-    @DisplayName("current_cycle_start가 잔금+보유평가액 대비 비정상적으로 크면 경고 로그를 남긴다")
-    void analyze_warns_when_current_cycle_start_implausible_vs_cash_and_holdings_value() {
-        // 운영 사례(2026-07-30): Gemini가 이미지 숫자를 오판독해 현사이클 시작을 143467.67로 반환
-        // (잔금 2934.92 + 보유 91주 x 평단 127.458 = 약 14533.6로 실제 값과 10배 가까이 차이)
-        String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":143467.67,\\"season_start_capital\\":10000.00,\\"capital_rows\\":[{\\"label\\":\\"잔금 $\\",\\"value\\":2934.92}],\\"avg_price\\":127.458,\\"holding_qty\\":91}"}]}}]}
-                """;
-        mockServer.expect(requestTo(GEMINI_ENDPOINT))
-                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
-
-        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
-
-        assertThat(result.currentCycleStart()).isEqualByComparingTo(new BigDecimal("143467.67"));
-        verify(notifyPort).notifyOcrWarning(contains("current_cycle_start 이상치 의심"));
-    }
-
-    @Test
-    @DisplayName("잔금 표를 못 읽었으면 시즌 시작원금 대비 비율로 current_cycle_start 이상치를 경고한다")
-    void analyze_warns_using_season_start_capital_when_cash_balance_missing() {
-        // 운영 사례(2026-08-14): 우측 자금 표 전체(잔금 포함)를 못 읽어 잔금 기준 검증이 무력화된 채
-        // capital_rows에 잘못 섞인 값(710)이 current_cycle_start로 그대로 채택됨
-        String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"season_start_capital\\":10000.00,\\"capital_rows\\":[{\\"label\\":\\"현사이클 시작\\",\\"value\\":710}],\\"avg_price\\":131.782,\\"holding_qty\\":35}"}]}}]}
-                """;
-        mockServer.expect(requestTo(GEMINI_ENDPOINT))
-                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
-
-        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
-
-        assertThat(result.currentCycleStart()).isEqualByComparingTo(new BigDecimal("710"));
-        verify(notifyPort).notifyOcrWarning(contains("current_cycle_start 이상치 의심"));
-    }
-
-    @Test
-    @DisplayName("current_cycle_start가 잔금+보유평가액과 비슷하면 경고하지 않는다")
-    void analyze_does_not_warn_when_current_cycle_start_plausible() {
-        String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":14533.60,\\"season_start_capital\\":10000.00,\\"capital_rows\\":[{\\"label\\":\\"잔금 $\\",\\"value\\":2934.92}],\\"avg_price\\":127.458,\\"holding_qty\\":91}"}]}}]}
-                """;
-        mockServer.expect(requestTo(GEMINI_ENDPOINT))
-                .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
-
-        adapter.analyze(List.of(new byte[]{1}));
-
-        verify(notifyPort, times(0)).notifyOcrWarning(contains("current_cycle_start 이상치 의심"));
-    }
-
-    @Test
     @DisplayName("mime_type은 항상 image/png로 전송한다")
     void request_always_sends_png_mime_type() {
-        String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holding_qty\\":0}"}]}}]}
-                """;
+        String geminiJson = envelope("empty-holdings-zero");
         mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andExpect(content().string(containsString("\"mime_type\":\"image/png\"")))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
@@ -543,12 +234,8 @@ class GeminiVisionAdapterTest {
     void analyze_retries_when_holdings_missing_with_sell_orders_present() {
         // 운영 사례(2026-08-14): 우측 자금 표를 통째로 못 읽어 holdings 관련 필드가 전부 null(=0)로
         // 파싱됐지만 SELL 주문은 정상 파싱됨 — 재요청 시 두 번째 응답에서 holdings를 확보한다
-        String incomplete = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[{\\"price\\":152.95,\\"qty\\":7}],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holding_qty\\":0}"}]}}]}
-                """;
-        String complete = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[{\\"price\\":152.95,\\"qty\\":7}],\\"current_cycle_start\\":null,\\"avg_price\\":131.782,\\"holding_qty\\":35}"}]}}]}
-                """;
+        String incomplete = envelope("sell-holdings-missing");
+        String complete = envelope("sell-holdings-present");
         mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(incomplete, MediaType.APPLICATION_JSON));
         mockServer.expect(requestTo(GEMINI_ENDPOINT))
@@ -563,9 +250,7 @@ class GeminiVisionAdapterTest {
     @Test
     @DisplayName("재시도해도 holdings가 계속 누락되면 마지막 응답을 그대로 반환한다")
     void analyze_returns_last_result_when_holdings_stays_missing_after_retries() {
-        String incomplete = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[{\\"price\\":152.95,\\"qty\\":7}],\\"current_cycle_start\\":null,\\"avg_price\\":null,\\"holding_qty\\":0}"}]}}]}
-                """;
+        String incomplete = envelope("sell-holdings-missing");
         for (int i = 0; i < 3; i++) {
             mockServer.expect(requestTo(GEMINI_ENDPOINT))
                     .andRespond(withSuccess(incomplete, MediaType.APPLICATION_JSON));
@@ -594,9 +279,7 @@ class GeminiVisionAdapterTest {
     @Test
     @DisplayName("문법 오류 JSON 응답을 막기 위해 JSON 응답 모드를 요청에 포함한다")
     void request_includes_json_response_mime_type() {
-        String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"holding_qty\\":0}"}]}}]}
-                """;
+        String geminiJson = envelope("minimal-empty");
         mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andExpect(content().string(containsString("\"responseMimeType\":\"application/json\"")))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
@@ -610,12 +293,8 @@ class GeminiVisionAdapterTest {
     @DisplayName("JSON 파싱 실패 시 재요청해 다음 응답으로 파싱한다")
     void analyze_retries_on_json_parse_failure() {
         // 따옴표 없는 콤마 숫자 — JSON 문법 오류
-        String invalid = """
-                {"candidates":[{"content":{"parts":[{"text":"```json\\n{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\": 14,299.87,\\"holding_qty\\":0}\\n```"}]}}]}
-                """;
-        String valid = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[],\\"current_cycle_start\\":\\"14,299.87\\",\\"holding_qty\\":0}"}]}}]}
-                """;
+        String invalid = envelope("invalid-fenced-comma");
+        String valid = envelope("valid-quoted-comma");
         mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(invalid, MediaType.APPLICATION_JSON));
         mockServer.expect(requestTo(GEMINI_ENDPOINT))
@@ -630,9 +309,7 @@ class GeminiVisionAdapterTest {
     @Test
     @DisplayName("JSON 파싱이 모든 시도에서 실패하면 Jackson 실패 원인을 포함한 예외를 던진다")
     void analyze_throws_with_parse_reason_after_all_attempts_fail() {
-        String invalid = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"current_cycle_start\\": 14,299.87}"}]}}]}
-                """;
+        String invalid = envelope("invalid-comma");
         for (int i = 0; i < 3; i++) {
             mockServer.expect(requestTo(GEMINI_ENDPOINT))
                     .andRespond(withSuccess(invalid, MediaType.APPLICATION_JSON));
@@ -649,9 +326,7 @@ class GeminiVisionAdapterTest {
     @Test
     @DisplayName("holdings 누락 의심 결과를 확보한 뒤 재요청이 503으로 끝나면 확보한 결과를 반환한다")
     void analyze_returns_suspicious_result_when_later_attempts_fail_with_503() {
-        String incomplete = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[],\\"sell\\":[{\\"price\\":152.95,\\"qty\\":7}],\\"holding_qty\\":0}"}]}}]}
-                """;
+        String incomplete = envelope("sell-holdings-missing-minimal");
         mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(incomplete, MediaType.APPLICATION_JSON));
         for (int i = 0; i < 2; i++) {
@@ -678,9 +353,7 @@ class GeminiVisionAdapterTest {
     @Test
     @DisplayName("수량·가격이 단위·콤마가 붙은 문자열로 와도 숫자로 파싱한다")
     void analyze_parses_quantity_and_price_strings_leniently() {
-        String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"{\\"buy\\":[{\\"price\\":\\"1,234.5\\",\\"qty\\":7}],\\"sell\\":[],\\"avg_price\\":120.5,\\"holding_qty\\":\\"35개\\",\\"cumulative_qty\\":\\"-\\",\\"holdings\\":\\"35.0\\"}"}]}}]}
-                """;
+        String geminiJson = envelope("lenient-strings");
         mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
@@ -694,9 +367,7 @@ class GeminiVisionAdapterTest {
     @Test
     @DisplayName("닫히지 않은 코드펜스·앞뒤 설명 문장이 붙은 응답도 JSON 본문만 추출해 파싱한다")
     void analyze_extracts_json_from_unclosed_fence() {
-        String geminiJson = """
-                {"candidates":[{"content":{"parts":[{"text":"```json\\n{\\"buy\\":[],\\"sell\\":[],\\"holding_qty\\":12}\\n"}]}}]}
-                """;
+        String geminiJson = envelope("unclosed-fence");
         mockServer.expect(requestTo(GEMINI_ENDPOINT))
                 .andRespond(withSuccess(geminiJson, MediaType.APPLICATION_JSON));
 
