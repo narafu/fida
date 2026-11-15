@@ -36,4 +36,6 @@
    - 태스크 8에 남은 것: `KISTA_URL`을 `http://caddy:8080`으로(infra 내부 리스너 배포 뒤, infra 소유 env), playwright `read_only`·`cap_drop: ALL` 검토
 4. ~~`04` 태스크 1~4·6~~ — 완료 (2026-11-15). 루트 `CLAUDE.md` 58줄, 환경변수 기준은 `.env.example`, 승인된 삭제 후보 삭제(`AGENTS.md` 유지), 메모리 3건 삭제
    - `04` 태스크 5: infra 이전이 1~2주 안이라 워크플로 수정은 건너뜀(reconcile.sh가 맡음). 2026-11-15 서버 수동 정리로 실행 중(67b8840)·직전(3562d4a) 이미지만 남기고 fida 태그 42개 삭제. `docker images | grep -c fida` = 4, 디스크 31G에서 8.2G로. 이전이 늦어지면 같은 정리를 다시 한다
-5. `03` 태스크 4 이후는 회귀 자료 20건 이후(약 4주)
+5. ~~`03` 태스크 1~~ — 완료 (2026-11-15). 최근 게시글 5건 모두 본문 이미지 3장, `table` 0개, 텍스트는 전날 체결 요약뿐이라 DOM 대체 불가(`findings/05-post-format.md`)
+6. `03` 태스크 4 이후는 회귀 자료 20건 이후(약 4주)
+   - 2026-11-15 전제 확인: 구 서버 `/opt/fida/.fida-state/ocr-archive/` 없음, 날짜 폴더 0개. infra 이전 뒤에는 kista-server 쪽 보관 경로에서 센다
