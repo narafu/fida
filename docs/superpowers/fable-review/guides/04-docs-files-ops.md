@@ -81,7 +81,7 @@ fida가 kista-server로 옮겨 kista-infra `reconcile.sh`로 배포되면 5번�
 | # | 내용 | 대상 | 모델 | 완료 판정 |
 |---|---|---|---|---|
 | 7 | 배포 금지 창 훅 신설. kista-infra `reconcile.yml`이 앱 레포의 `deploy/hooks/pre-apply.sh`가 있으면 실행한다. 화~토 KST 06:50~07:45이면 exit 1 | `deploy/hooks/pre-apply.sh` (새 파일), `server-deploy.yml`의 가드 로직을 옮겨 옴 | Sonnet | `TZ=Asia/Seoul` 기준 시각을 인자로 받아 판정하는 자체 점검 1개(`bash deploy/hooks/pre-apply.sh --check "2026-11-12 07:10"` 등)가 금지·허용 양쪽을 맞힘 |
-| 8 | 이전 완료 뒤 fida 자체 배포 정리: `server-deploy.yml`의 SSH 배포·헬스게이트·롤백 단계, `deploy/server/Caddyfile`, compose의 caddy 서비스 삭제. `KISTA_URL`을 `http://caddy:8080`으로. `deploy/server/README.md`를 새 구조에 맞게 축소 | 해당 파일들 | Sonnet | 이전 후 첫 07:00 실행에서 KISTA 전송 완료 로그와 heartbeat 핑 |
+| 8 | 이전 완료 뒤 fida 자체 배포 정리: `server-deploy.yml`의 SSH 배포·헬스게이트·롤백 단계, `deploy/server/Caddyfile`, compose의 caddy 서비스 삭제. `KISTA_URL`을 `http://caddy:8080`으로. `deploy/server/README.md`를 새 구조에 맞게 축소 | 해당 파일들 | Sonnet | 이전 후 첫 07:00 실행에서 KISTA 전송 완료 로그와 heartbeat 핑 (**2026-11-17 확인 완료**. `KISTA_URL` 전환만 infra 리스너 배포 대기) |
 
 `/opt/fida/.fida-state/`는 옮기지 않고 새로 시작한다. Gemini quota 파일은 날짜별 카운트라 잃는 것은 이전 당일의 카운트뿐이다. 단 `03` 태스크 3(OCR 보관함 `/state/ocr-archive/`)을 이전 전에 배포했다면 그 디렉토리는 옮긴다. 새 디렉토리도 uid 100:101 소유여야 한다.
 

@@ -33,7 +33,8 @@
    - **main 병합 = 컷오버.** 병합하면 구 SSH 배포가 사라지고 infra로 dispatch한다. 이전 당일 사용자 승인 뒤 병합한다. 그 전에 main에 커밋하면 구 SSH 배포가 fida-server에 그대로 나간다(paths 필터 없음)
    - 병합 전 준비: fida 레포 `vars.INFRA_APP_CLIENT_ID`·`secrets.INFRA_APP_PRIVATE_KEY` 등록 완료(2026-11-15). kista-infra bbeed69는 main에 push됨(rebase 후 5947ac7). 남은 것은 infra 세션 몫이다: `state/fida.yml`(roles 2개), `secrets/fida.env`(`FANDING_*` 포함), service-account.json 이동, ocr-archive(아직 없음, kista-server에 100:101 빈 디렉토리 생성), DNS 전환, 구 서버 fida 정지. 병합 시점은 infra 세션이 알린다
    - 첫 dispatch에서 확인: fida 커밋에 `deploy/production` status가 붙는지(kista-infra-dispatch App의 fida 설치·statuses 권한)
-   - 태스크 8에 남은 것: `KISTA_URL`을 `http://caddy:8080`으로(infra 내부 리스너 배포 뒤, infra 소유 env), playwright `read_only`·`cap_drop: ALL` 검토
+   - 이전 후 첫 정규 실행 **2026-11-17 확인 완료**: 07:00 31.4초 성공, KISTA 전송 완료, heartbeat 핑 완료, ocr-archive/2026-11-17 생성, `fida.kista-app.com/actuator/health` 200. 로컬 `infra-bundle` 브랜치는 이미 없음
+   - 태스크 8 남은 것: (a) `KISTA_URL`→`http://caddy:8080`은 **infra 대기**. kista-infra Caddy에 :8080 리스너가 아직 없다(2026-11-17 실측). 리스너 배포·경로 분기 검증 뒤 infra가 `secrets/fida.env`를 바꾸고 알려 준다. 이름 해석은 확인됨(`getent hosts caddy`). fida는 문서만 반영함. (b) playwright 하드닝: 로컬 검증 결과 `cap_drop: ALL`+`no-new-privileges`는 Chromium 기동 OK(이미 `--no-sandbox`), `read_only: true`는 `/tmp`·`/home/node`를 tmpfs로 줘도 `chrome_crashpad_handler: --database is required`로 기동 실패. 적용하려면 `--disable-crash-reporter` 등 플래그 추가 후 재검증 필요. 적용은 사용자 결정
 4. ~~`04` 태스크 1~4·6~~ — 완료 (2026-11-15). 루트 `CLAUDE.md` 58줄, 환경변수 기준은 `.env.example`, 승인된 삭제 후보 삭제(`AGENTS.md` 유지), 메모리 3건 삭제
    - `04` 태스크 5: infra 이전이 1~2주 안이라 워크플로 수정은 건너뜀(reconcile.sh가 맡음). 2026-11-15 서버 수동 정리로 실행 중(67b8840)·직전(3562d4a) 이미지만 남기고 fida 태그 42개 삭제. `docker images | grep -c fida` = 4, 디스크 31G에서 8.2G로. 이전이 늦어지면 같은 정리를 다시 한다
 5. ~~`03` 태스크 1~~ — 완료 (2026-11-15). 최근 게시글 5건 모두 본문 이미지 3장, `table` 0개, 텍스트는 전날 체결 요약뿐이라 DOM 대체 불가(`findings/05-post-format.md`)

@@ -42,7 +42,7 @@ TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
 INTERNAL_API_TOKEN=
 
-KISTA_URL=https://api.kista-app.com
+KISTA_URL=https://api.kista-app.com   # 리스너 배포 뒤 infra가 http://caddy:8080으로 전환
 
 HEARTBEAT_URL=   # healthchecks.io dead-man's switch (미설정 시 핑 생략)
 
