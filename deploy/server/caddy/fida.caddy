@@ -2,6 +2,9 @@
 # 도메인은 하드코딩 — infra caddy 컨테이너 환경은 API_DOMAIN·UI_DOMAIN만 명시 주입해 {$FIDA_DOMAIN}이 비면 reload가 실패한다
 # upstream 공용 설정(keepalive off·lb_try·health 주기)은 kista-infra Caddyfile의 `(upstream)` snippet이 소유한다
 fida.kista-app.com {
+	# 보안 헤더·접근 로그(/data/access/fida.log) — kista-infra Caddyfile의 `(site)` snippet이 소유한다
+	import site fida
+
 	encode zstd gzip
 
 	# 외부 공개는 헬스체크(UptimeRobot)만 — 주문 트리거·swagger·actuator 나머지는 서버 내부에서만 호출 (README 수동 트리거 참조)
