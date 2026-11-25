@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # kista-infra reconcile.yml이 서버 적용 직전 app 디렉터리에서 인자 없이 실행하는 fida hook — 배포 금지 창 검사.
 # 배포가 실행 중인 스케줄 스레드를 강제 종료해 매매 기록 처리가 유실될 수 있어, 스케줄러 구간(07:00 기동, 실패 시 07:20 재시도)에는 차단.
-# 배포 금지 창의 유일한 기준(구 server-deploy.yml SSH 배포 가드를 대체): KST 화~토 06:50~07:45 (양끝 포함). exit 1이면 적용 차단.
+# 경계 근거: 시작 06:55 = reconcile 소요(~2분)가 07:00 기동과 겹치지 않게, 끝 07:40 = 07:20 재시도의 최악 소요(스크래핑 180초 + Gemini 3회×120초 + 재시도 대기 2회×60초 + KISTA·텔레그램 각 120초 ≈ 15분) 이후 여유 5분.
+# 배포 금지 창의 유일한 기준(구 server-deploy.yml SSH 배포 가드를 대체): KST 화~토 06:55~07:40 (양끝 포함). exit 1이면 적용 차단.
 # 사용: (인자 없음)=현재 시각 판정 | --check "YYYY-MM-DD HH:MM"=해당 KST 시각 판정 | --self-test=경계 표 검증
 set -euo pipefail
 
 # 판정: $1=요일(%u, 1=월~7=일) $2=HHMM 숫자 — 차단이면 0, 허용이면 1
 is_blocked() {
-  [ "$1" -ge 2 ] && [ "$1" -le 6 ] && [ "$((10#$2))" -ge 650 ] && [ "$((10#$2))" -le 745 ]
+  [ "$1" -ge 2 ] && [ "$1" -le 6 ] && [ "$((10#$2))" -ge 655 ] && [ "$((10#$2))" -le 740 ]
 }
 
 # 날짜(YYYY-MM-DD)의 요일 — GNU date 우선, 실패 시 BSD date
@@ -34,8 +35,8 @@ case "${1:-}" in
   --self-test)
     rc=0
     # 기대값(blocked/allowed) 시각 — 2026-11-10=화, 12=목, 14=토, 15=일, 16=월
-    for c in "blocked 2026-11-10 06:50" "blocked 2026-11-10 07:45" "blocked 2026-11-14 07:00" "blocked 2026-11-12 07:10" \
-             "allowed 2026-11-10 06:49" "allowed 2026-11-10 07:46" "allowed 2026-11-16 07:10" "allowed 2026-11-15 07:10"; do
+    for c in "blocked 2026-11-10 06:55" "blocked 2026-11-10 07:40" "blocked 2026-11-14 07:00" "blocked 2026-11-12 07:10" \
+             "allowed 2026-11-10 06:54" "allowed 2026-11-10 07:41" "allowed 2026-11-16 07:10" "allowed 2026-11-15 07:10"; do
       want=${c%% *} at=${c#* }
       if check "$at"; then got=blocked; else got=allowed; fi
       [ "$got" = "$want" ] || { echo "FAIL: $at 기대 $want, 실제 $got"; rc=1; }
@@ -51,7 +52,7 @@ esac
 
 # live: 현재 KST 시각으로 판정
 if is_blocked "$(TZ=Asia/Seoul date +%u)" "$(TZ=Asia/Seoul date +%H%M)"; then
-  echo "::error::현재 KST $(TZ=Asia/Seoul date +%H:%M)는 fida 스케줄러 실행 시간대(화~토 06:50~07:45) — 배포가 실행 중인 스케줄 스레드를 강제 종료해 매매 기록 처리가 유실될 수 있어 차단합니다. 스케줄 종료 후 재실행하거나, 긴급 시 kista-infra Reconcile App force=true로 강제 적용하세요."
+  echo "::error::현재 KST $(TZ=Asia/Seoul date +%H:%M)는 fida 스케줄러 실행 시간대(화~토 06:55~07:40) — 배포가 실행 중인 스케줄 스레드를 강제 종료해 매매 기록 처리가 유실될 수 있어 차단합니다. 스케줄 종료 후 재실행하거나, 긴급 시 kista-infra Reconcile App force=true로 강제 적용하세요."
   exit 1
 fi
 echo "fida 스케줄 실행 시간대 아님 (KST $(TZ=Asia/Seoul date +%H:%M)) — 적용 진행"

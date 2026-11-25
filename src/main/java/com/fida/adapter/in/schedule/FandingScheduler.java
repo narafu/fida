@@ -19,7 +19,7 @@ import java.time.Instant;
 @Slf4j
 public class FandingScheduler {
 
-    // 07:00 실패 시 1회 재시도 지연 — 07:20 기동, 배포 가드(06:50~07:45 KST) 안에서 끝나도록 맞춤
+    // 07:00 실패 시 1회 재시도 지연 — 07:20 기동, 배포 가드(06:55~07:40 KST) 안에서 끝나도록 맞춤
     static final Duration RETRY_DELAY = Duration.ofMinutes(20);
 
     private final ProcessTradingRecordUseCase useCase;

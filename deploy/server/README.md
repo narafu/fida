@@ -8,7 +8,7 @@
 | `roles` | 적용 순서. `playwright-server` → `fida` |
 | `images` | role별 이미지 repo |
 | `caddy/fida.caddy` | 도메인 라우팅. `/actuator/health`만 공개, 나머지 404 |
-| `../hooks/pre-apply.sh` | 배포 금지 창(화~토 06:50~07:45 KST) 검사. infra reconcile.yml이 실행한다 |
+| `../hooks/pre-apply.sh` | 배포 금지 창(화~토 06:55~07:40 KST) 검사. infra reconcile.yml이 실행한다 |
 
 네트워크: fida는 `shared_net`(Caddy)과 `browser_net`(playwright 전용), playwright-server는 `browser_net`만. 둘 다 `data_net`(postgres/redis)에는 들어가지 않는다.
 

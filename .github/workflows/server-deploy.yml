@@ -88,7 +88,7 @@ jobs:
 
   # 서버 적용은 kista-infra Reconcile App이 한다(검증·bundle·pre-apply hook·reconcile.sh 헬스 게이트·롤백·state 커밋).
   # 여기선 요청만 보내고 끝난다 — 결과는 infra가 이 커밋에 commit status `deploy/production`으로 되돌려 쓴다
-  # 배포 금지 창(화~토 06:50~07:45 KST)은 deploy/hooks/pre-apply.sh가 infra 쪽에서 검사한다
+  # 배포 금지 창(화~토 06:55~07:40 KST)은 deploy/hooks/pre-apply.sh가 infra 쪽에서 검사한다
   deploy:
     name: Deploy (kista-infra reconcile)
     runs-on: ubuntu-latest
