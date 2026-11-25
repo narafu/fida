@@ -1,1 +1,1 @@
-{"buy":[{"price":39.39,"qty":27},{"price":39.15,"qty":28}],"sell":[{"price":39.73,"qty":"ALL"}],"current_cycle_start":14063.31,"current_cycle_realized_pnl":289.54,"avg_price":35.564,"holdings":0,"cumulative_qty":27,"buy_qty":-57}
+{"order_tables":[{"header":"매수가","rows":[{"price":39.39,"qty":27},{"price":39.15,"qty":28}]},{"header":"매도가","rows":[{"price":39.73,"qty":"ALL"}]}],"current_cycle_start":14063.31,"current_cycle_realized_pnl":289.54,"avg_price":35.564,"holdings":0,"cumulative_qty":27,"buy_qty":-57}

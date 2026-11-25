@@ -2,6 +2,7 @@ package com.fida.adapter.out.ocr;
 
 import com.fida.adapter.out.ocr.GeminiResponseParser.GeminiOrderResult;
 import com.fida.adapter.out.ocr.GeminiResponseParser.LabeledValue;
+import com.fida.adapter.out.ocr.GeminiResponseParser.OrderTable;
 import com.fida.adapter.out.ocr.GeminiResponseParser.RawOrderItem;
 import com.fida.domain.model.OrderItem;
 import com.fida.domain.model.ParsedOrder;
@@ -25,7 +26,8 @@ class OcrResultReconcilerTest {
     @DisplayName("보정 경고를 알림 없이 결과에 담아 반환한다")
     void reconcile_collects_warnings_without_side_effects() {
         var raw = new GeminiOrderResult(
-                List.of(), List.of(), List.of(new RawOrderItem(new BigDecimal("236.54"), "ALL")),
+                List.of(new OrderTable("매수가", List.of()),
+                        new OrderTable("매도가", List.of(new RawOrderItem(new BigDecimal("236.54"), "ALL")))),
                 null, null,
                 List.of(new LabeledValue("현사이클 시작", new BigDecimal("11783.18"))),
                 List.of(new LabeledValue("현사이클 실현수익", new BigDecimal("12.34"))),
@@ -36,9 +38,8 @@ class OcrResultReconcilerTest {
         assertThat(result.order().sellOrders()).hasSize(1);
         assertThat(result.order().currentCycleStart()).isEqualByComparingTo("11783.18");
         assertThat(result.order().currentCycleRealizedPnl()).isEqualByComparingTo("12.34");
-        assertThat(result.warnings())
-                .anyMatch(w -> w.contains("sell_rows"))
-                .anyMatch(w -> w.contains("실현수익 불일치"));
+        assertThat(result.orderTableError()).isNull();
+        assertThat(result.warnings()).anyMatch(w -> w.contains("실현수익 불일치"));
     }
 
     @Test
@@ -90,46 +91,47 @@ class OcrResultReconcilerTest {
     }
 
     @Test
-    @DisplayName("sell이 비어도 sell_rows의 마지막 유효 행에서 매도 주문을 복구한다")
-    void analyze_recovers_sell_from_sell_rows_when_sell_is_empty() {
-        // 운영 사례: 앞의 두 매도 행이 비어 있어 Gemini가 정규화된 sell 배열에서 마지막 주문까지 누락함
-        var reconciled = reconcile("sell-rows-recover");
-        ParsedOrder result = reconciled.order();
+    @DisplayName("2026-11-26 회귀: 매수가 표가 비고 매도가 표에만 3행이 있으면 모두 sell로 분류한다")
+    void reconcile_classifies_rows_by_header_not_position() {
+        var reconciled = reconcile("order-tables-sell-only-regression");
 
-        assertThat(result.sellOrders()).containsExactly(new OrderItem(new BigDecimal("112.79"), "ALL"));
-        assertThat(reconciled.warnings()).filteredOn(w -> w.contains("sell_rows")).hasSize(1);
+        assertThat(reconciled.orderTableError()).isNull();
+        assertThat(reconciled.order().buyOrders()).isEmpty();
+        assertThat(reconciled.order().sellOrders()).containsExactly(
+                new OrderItem(new BigDecimal("57.79"), "8"),
+                new OrderItem(new BigDecimal("73.07"), "11"),
+                new OrderItem(new BigDecimal("33.54"), "4"));
     }
 
     @Test
-    @DisplayName("sell과 sell_rows의 세 행이 모두 비어 있으면 매도 주문을 만들지 않는다")
-    void analyze_keeps_sell_empty_when_all_sell_rows_are_empty() {
-        var reconciled = reconcile("sell-rows-all-empty");
-        ParsedOrder result = reconciled.order();
+    @DisplayName("rows의 null 원소는 빈 행으로 건너뛴다")
+    void reconcile_skips_null_rows() {
+        var reconciled = OcrResultReconciler.reconcile(GeminiResponseParser.parse(
+                "{\"order_tables\":[{\"header\":\"매수가\",\"rows\":[null,null]},"
+                        + "{\"header\":\"매도가\",\"rows\":[null,{\"price\":57.79,\"qty\":8}]}],\"holding_qty\":8}"));
 
-        assertThat(result.sellOrders()).isEmpty();
+        assertThat(reconciled.orderTableError()).isNull();
+        assertThat(reconciled.order().buyOrders()).isEmpty();
+        assertThat(reconciled.order().sellOrders()).containsExactly(new OrderItem(new BigDecimal("57.79"), "8"));
     }
 
     @Test
-    @DisplayName("sell에 주문이 있으면 sell_rows를 폴백으로 중복 추가하지 않는다")
-    void analyze_prefers_sell_over_sell_rows() {
-        var reconciled = reconcile("sell-over-sell-rows");
-        ParsedOrder result = reconciled.order();
+    @DisplayName("매수가 표가 2개이고 매도가 표가 없으면 구조 오류를 반환한다")
+    void reconcile_reports_error_when_order_tables_structure_invalid() {
+        var reconciled = reconcile("order-tables-duplicate-buy");
 
-        assertThat(result.sellOrders()).containsExactly(new OrderItem(new BigDecimal("112.79"), "ALL"));
+        assertThat(reconciled.orderTableError()).isNotNull().contains("매수가");
+        assertThat(reconciled.order().buyOrders()).isEmpty();
+        assertThat(reconciled.order().sellOrders()).isEmpty();
     }
 
     @Test
-    @DisplayName("sell에 유효 행이 있어도 sell_rows에 더 많은 유효 행이 있으면 sell_rows로 부분 누락을 복구한다")
-    void analyze_recovers_sell_from_sell_rows_when_sell_partially_drops_valid_rows() {
-        // 운영 사례(2026-05-28): 매도가 2행(218.23/4주)이 sell 배열에서 누락되고 3행(218.92/남은전부)만 남아
-        // KISTA로 SELL 1건만 전송됨. sell_rows에는 2행이 온전히 보존되어 있어 이를 근거로 복구한다.
-        var reconciled = reconcile("sell-rows-partial-drop");
-        ParsedOrder result = reconciled.order();
+    @DisplayName("order_tables가 없으면 구조 오류를 반환한다")
+    void reconcile_reports_error_when_order_tables_missing() {
+        var reconciled = OcrResultReconciler.reconcile(
+                GeminiResponseParser.parse("{\"holding_qty\":0}"));
 
-        assertThat(result.sellOrders()).containsExactly(
-                new OrderItem(new BigDecimal("218.23"), "4"),
-                new OrderItem(new BigDecimal("218.92"), "ALL"));
-        assertThat(reconciled.warnings()).filteredOn(w -> w.contains("부분 누락")).hasSize(1);
+        assertThat(reconciled.orderTableError()).isNotNull();
     }
 
     @Test

@@ -1,1 +1,1 @@
-{"buy":[{"price":75000,"qty":100}],"sell":[{"price":80000,"qty":"ALL"}],"current_cycle_start":1000000,"avg_price":72000,"holding_qty":200}
+{"order_tables":[{"header":"매수가","rows":[{"price":75000,"qty":100}]},{"header":"매도가","rows":[{"price":80000,"qty":"ALL"}]}],"current_cycle_start":1000000,"avg_price":72000,"holding_qty":200}

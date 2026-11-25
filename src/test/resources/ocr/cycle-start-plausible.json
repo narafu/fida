@@ -1,1 +1,1 @@
-{"buy":[],"sell":[],"current_cycle_start":14533.60,"season_start_capital":10000.00,"capital_rows":[{"label":"잔금 $","value":2934.92}],"avg_price":127.458,"holding_qty":91}
+{"order_tables":[{"header":"매수가","rows":[]},{"header":"매도가","rows":[]}],"current_cycle_start":14533.60,"season_start_capital":10000.00,"capital_rows":[{"label":"잔금 $","value":2934.92}],"avg_price":127.458,"holding_qty":91}

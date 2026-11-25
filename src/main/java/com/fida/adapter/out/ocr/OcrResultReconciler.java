@@ -2,6 +2,7 @@ package com.fida.adapter.out.ocr;
 
 import com.fida.adapter.out.ocr.GeminiResponseParser.GeminiOrderResult;
 import com.fida.adapter.out.ocr.GeminiResponseParser.LabeledValue;
+import com.fida.adapter.out.ocr.GeminiResponseParser.OrderTable;
 import com.fida.adapter.out.ocr.GeminiResponseParser.RawOrderItem;
 import com.fida.domain.model.OrderItem;
 import com.fida.domain.model.ParsedOrder;
@@ -24,20 +25,22 @@ final class OcrResultReconciler {
     // holding_qty 대비 cumulative_qty가 이 배율 이상 벌어지면 Gemini 환각(다른 필드 오독)으로 의심
     private static final int HOLDINGS_MAGNITUDE_MISMATCH_RATIO = 10;
 
-    // 보정 결과 + 알림 대상 경고
-    record Result(ParsedOrder order, List<String> warnings) {}
+    // order_tables 헤더에서 매매 방향을 판별하는 라벨(공백 제거 기준)
+    private static final String BUY_LABEL = "매수";
+    private static final String SELL_LABEL = "매도";
+
+    // 보정 결과 + 알림 대상 경고 + order_tables 구조 오류(정상이면 null — 있으면 결과를 채택하지 말고 재요청)
+    record Result(ParsedOrder order, List<String> warnings, String orderTableError) {}
 
     static Result reconcile(GeminiOrderResult raw) {
         List<String> warnings = new ArrayList<>(); // 호출자가 알림으로 보낼 경고
         int holdings = resolveHoldings(raw, warnings);
         BigDecimal currentCycleStart = resolveCurrentCycleStart(raw);
         BigDecimal avgPrice = (holdings == 0) ? null : raw.avgPrice();
-        List<OrderItem> buyOrders = toOrderItems(raw.buy());
-        List<OrderItem> sellOrders = resolveSellOrders(raw, warnings);
-        // sell이 비어있으면 Gemini가 매도 주문을 누락했을 가능성 — 로그로 원인 추적
-        if (sellOrders.isEmpty()) {
-            log.warn("Gemini sell 파싱 결과 비어있음 — 원시 sell 데이터: {}", raw.sell());
-        }
+        // 헤더 라벨로 매수·매도 표를 구분 — 구조가 어긋나면 방향이 틀린 주문을 막기 위해 오류만 전달
+        String orderTableError = validateOrderTables(raw.orderTables());
+        List<OrderItem> buyOrders = orderTableError == null ? rowsOf(raw.orderTables(), BUY_LABEL) : List.of();
+        List<OrderItem> sellOrders = orderTableError == null ? rowsOf(raw.orderTables(), SELL_LABEL) : List.of();
         // holdings=0 & sell 존재 시 OCR 오파싱 가능성 — 원문은 GeminiResponseParser가 INFO로 남김
         if (holdings == 0 && !sellOrders.isEmpty()) {
             log.warn("holdings=0 인데 SELL 주문 존재 — 원시 결과: {}", raw);
@@ -53,7 +56,7 @@ final class OcrResultReconciler {
 
         ParsedOrder order = new ParsedOrder(buyOrders, sellOrders, currentCycleStart,
                 resolveCurrentCycleRealizedPnl(raw, warnings), avgPrice, holdings);
-        return new Result(order, List.copyOf(warnings));
+        return new Result(order, List.copyOf(warnings), orderTableError);
     }
 
     private static void warn(List<String> warnings, String warning) {
@@ -63,25 +66,44 @@ final class OcrResultReconciler {
 
     private static List<OrderItem> toOrderItems(List<RawOrderItem> items) {
         if (items == null) return List.of();
+        // 빈 행을 객체 대신 null 원소로 응답하는 경우도 빈 행으로 취급
         return items.stream()
-                .filter(i -> i.price() != null || i.qty() != null)
+                .filter(i -> i != null && (i.price() != null || i.qty() != null))
                 .map(i -> new OrderItem(i.price(), i.qty() != null ? String.valueOf(i.qty()) : null))
                 .toList();
     }
 
-    private static List<OrderItem> resolveSellOrders(GeminiOrderResult raw, List<String> warnings) {
-        List<OrderItem> sellOrders = toOrderItems(raw.sell());
-        List<OrderItem> sellRows = toOrderItems(raw.sellRows());
-
-        // 운영 사례(2026-05-28): sell이 비어있지 않아도 일부 유효 행만 담고 다른 행을 누락시킬 수 있음 —
-        // 물리적 3행을 보존하는 sell_rows의 유효 행 수가 sell보다 많으면(전체/부분 누락) sell_rows를 신뢰한다.
-        if (sellRows.size() <= sellOrders.size()) {
-            return sellOrders;
+    // 헤더(공백 제거)에 "매수"/"매도" 중 정확히 하나만 포함해야 하고, 각 표는 정확히 1개여야 한다
+    private static String validateOrderTables(List<OrderTable> tables) {
+        List<String> headers = tables == null ? List.of() : tables.stream()
+                .map(t -> t == null ? null : t.header()).toList();
+        boolean ambiguous = headers.stream().anyMatch(h -> h == null || isBuy(h) == isSell(h));
+        long buyCount = headers.stream().filter(h -> h != null && isBuy(h)).count();
+        long sellCount = headers.stream().filter(h -> h != null && isSell(h)).count();
+        if (headers.isEmpty() || ambiguous || buyCount != 1 || sellCount != 1) {
+            return "order_tables 구조 오류(매수가·매도가 표가 각 1개여야 함) — 받은 헤더: " + headers;
         }
-        warn(warnings, sellOrders.isEmpty()
-                ? "Gemini sell 누락을 sell_rows에서 복구: " + sellRows
-                : "Gemini sell 부분 누락 감지(sell=" + sellOrders + ", sell_rows=" + sellRows + ") — sell_rows 전체를 사용");
-        return sellRows;
+        return null;
+    }
+
+    private static List<OrderItem> rowsOf(List<OrderTable> tables, String label) {
+        return tables.stream()
+                .filter(t -> normalize(t.header()).contains(label))
+                .findFirst()
+                .map(t -> toOrderItems(t.rows()))
+                .orElse(List.of());
+    }
+
+    private static boolean isBuy(String header) {
+        return normalize(header).contains(BUY_LABEL);
+    }
+
+    private static boolean isSell(String header) {
+        return normalize(header).contains(SELL_LABEL);
+    }
+
+    private static String normalize(String header) {
+        return header.replaceAll("\\s+", "");
     }
 
     private static int resolveHoldings(GeminiOrderResult raw, List<String> warnings) {

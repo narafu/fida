@@ -1,2 +1,2 @@
 ```json
-{"buy":[],"sell":[],"holding_qty":12}
+{"order_tables":[{"header":"매수가","rows":[]},{"header":"매도가","rows":[]}],"holding_qty":12}

@@ -72,11 +72,9 @@ final class GeminiResponseParser {
     // ── Gemini 파싱 결과 JSON DTO ───────────────────────────────────
     @JsonIgnoreProperties(ignoreUnknown = true)
     record GeminiOrderResult(
-            List<RawOrderItem> buy,
-            List<RawOrderItem> sell,
-
-            @JsonProperty("sell_rows")
-            List<RawOrderItem> sellRows,
+            // 헤더 라벨 기반 매수·매도 표 — 방향은 위치가 아니라 헤더로만 결정
+            @JsonProperty("order_tables")
+            List<OrderTable> orderTables,
 
             @JsonProperty("current_cycle_start")
             @JsonDeserialize(using = CommaBigDecimalDeserializer.class)
@@ -109,6 +107,10 @@ final class GeminiResponseParser {
             @JsonDeserialize(using = CommaBigDecimalDeserializer.class)
             BigDecimal cumulativeQty
     ) {}
+
+    // 매매표 블록 하나 — 헤더(매수가/매도가)와 물리적 행
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record OrderTable(String header, List<RawOrderItem> rows) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record RawOrderItem(@JsonDeserialize(using = CommaBigDecimalDeserializer.class) BigDecimal price,

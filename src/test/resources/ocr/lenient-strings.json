@@ -1,1 +1,1 @@
-{"buy":[{"price":"1,234.5","qty":7}],"sell":[],"avg_price":120.5,"holding_qty":"35개","cumulative_qty":"-","holdings":"35.0"}
+{"order_tables":[{"header":"매수가","rows":[{"price":"1,234.5","qty":7}]},{"header":"매도가","rows":[]}],"avg_price":120.5,"holding_qty":"35개","cumulative_qty":"-","holdings":"35.0"}

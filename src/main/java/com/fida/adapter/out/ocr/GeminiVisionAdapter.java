@@ -35,7 +35,7 @@ public class GeminiVisionAdapter implements OcrPort {
 
         // 원본 이미지 보관 (Gemini 호출 전)
         Path archiveRun = archive.begin(images);
-        // 503·JSON 파싱 실패는 3회 예산 안에서 재시도, 그 외 오류는 GeminiClient가 알림 후 즉시 전파
+        // 503·JSON 파싱 실패·order_tables 구조 오류는 3회 예산 안에서 재시도, 그 외 오류는 GeminiClient가 알림 후 즉시 전파
         Exception lastFailure = null;
         // holdings 누락 의심으로 재요청한 직전 결과 — 이후 시도가 모두 실패하면 이 값을 반환
         OcrResultReconciler.Result suspicious = null;
@@ -45,6 +45,12 @@ public class GeminiVisionAdapter implements OcrPort {
                 // parse 전에 원시 응답 보관 — 파싱 실패·재요청으로 버린 응답도 남긴다
                 archive.saveResponse(archiveRun, attempt, raw);
                 var result = OcrResultReconciler.reconcile(GeminiResponseParser.parse(raw));
+                // 매수·매도 표 구조 오류는 방향이 틀린 주문으로 이어질 수 있어 채택하지 않고 즉시 재요청
+                if (result.orderTableError() != null) {
+                    lastFailure = new OcrException(result.orderTableError());
+                    log.warn("Gemini order_tables 구조 오류 (시도 {}/{}) — {}", attempt, MAX_RETRIES, result.orderTableError());
+                    continue;
+                }
                 // 운영 사례(2026-08-14): holdings 관련 필드를 통째로 누락한 채 SELL 주문만 파싱되는 경우가 있어,
                 // 남은 재시도가 있으면 Gemini에 다시 요청해 완전한 응답을 한 번 더 시도한다
                 if (isHoldingsSuspiciouslyMissing(result.order()) && attempt < MAX_RETRIES) {
@@ -73,8 +79,9 @@ public class GeminiVisionAdapter implements OcrPort {
             return accept(suspicious);
         }
         notifyPort.notifyGeminiError(lastFailure);
-        if (lastFailure instanceof GeminiJsonParseException parseFailure) {
-            throw parseFailure;
+        // 파싱·구조 오류(OcrException)는 그대로, 503은 아래에서 감싼다
+        if (lastFailure instanceof OcrException ocrFailure) {
+            throw ocrFailure;
         }
         log.error("Gemini API 503 오류 {}회 재시도 후 최종 실패", MAX_RETRIES, lastFailure);
         throw new OcrException("Gemini API 503 오류 " + MAX_RETRIES + "회 재시도 후 실패", lastFailure);

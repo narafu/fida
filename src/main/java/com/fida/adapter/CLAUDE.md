@@ -20,7 +20,7 @@
 
 - 구조: `GeminiClient`(HTTP 1회·quota·오류 분류) / `GeminiResponseParser`(텍스트→DTO) / `OcrResultReconciler`(순수 보정·경고) / `GeminiVisionAdapter`(3회 재시도, 최종 결과의 경고만 알림)
 - HTTP 429·`RESOURCE_EXHAUSTED`는 `OcrException("Gemini API 일일한도 초과")`로 분류 — 일반 통신 오류로 뭉개지 않는다
-- 매도: `sell_rows`는 빈 행 포함 물리 3행 순서 유지. `sell`이 비었거나 `sell_rows` 유효 행이 더 많으면(부분 누락) `sell_rows`로 대체 (`resolveSellOrders()`)
+- 매수·매도: `order_tables`의 헤더 라벨("매수가"/"매도가")로만 방향 결정 — 위치 기반 판단이 매도 3행을 buy로 넣은 사례(2026-11-26). 매수·매도 테이블이 각 1개가 아니면 재요청, 3회 모두 실패하면 OcrException(잘못된 방향 주문 전송 차단)
 - 보유수량은 `holding_qty`·`cumulative_qty` 두 후보로만 결정 (`resolveHoldings()`). 소수 값은 금액 오독으로 보고 제외 + 경고
 - 프롬프트는 화면 위치가 아닌 라벨 텍스트 기준 — 레이아웃이 바뀌면 위치 힌트가 엉뚱한 행(하단 "누적실현수익")을 가리킨다
 - JSON 모드(`responseMimeType=application/json`)를 쓰지만 코드펜스·한글 후처리는 방어적으로 유지

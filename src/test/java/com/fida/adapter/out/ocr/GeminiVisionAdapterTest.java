@@ -376,4 +376,35 @@ class GeminiVisionAdapterTest {
         assertThat(result.holdings()).isEqualTo(12);
         mockServer.verify();
     }
+
+    @Test
+    @DisplayName("order_tables 구조 오류는 재요청하고 다음 정상 응답을 반환한다")
+    void analyze_retries_on_order_table_structure_error() {
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
+                .andRespond(withSuccess(envelope("order-tables-duplicate-buy"), MediaType.APPLICATION_JSON));
+        mockServer.expect(requestTo(GEMINI_ENDPOINT))
+                .andRespond(withSuccess(envelope("order-tables-sell-only-regression"), MediaType.APPLICATION_JSON));
+
+        ParsedOrder result = adapter.analyze(List.of(new byte[]{1}));
+
+        assertThat(result.sellOrders()).hasSize(3);
+        mockServer.verify(); // 정확히 2회 호출
+        verify(notifyPort, times(0)).notifyGeminiError(any());
+    }
+
+    @Test
+    @DisplayName("order_tables 구조 오류가 3회 모두 반복되면 결과를 채택하지 않고 OcrException을 던진다")
+    void analyze_throws_when_order_table_structure_error_persists() {
+        for (int i = 0; i < 3; i++) {
+            mockServer.expect(requestTo(GEMINI_ENDPOINT))
+                    .andRespond(withSuccess(envelope("order-tables-duplicate-buy"), MediaType.APPLICATION_JSON));
+        }
+
+        assertThatThrownBy(() -> adapter.analyze(List.of(new byte[]{1})))
+                .isInstanceOf(OcrException.class)
+                .hasMessageContaining("order_tables");
+
+        mockServer.verify();
+        verify(notifyPort, times(1)).notifyGeminiError(any(Exception.class));
+    }
 }
